@@ -28,3 +28,10 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+
+- Frontend-only site: no backend, database, auth or payments; forms show on-page success and hand off via WhatsApp links. Why: the brief requires a static site.
+- Business details live only in `src/config/business.ts`; cake prices, categories and menu in `src/config/products.ts`; reviews and gallery in `src/config/content.ts`. Why: owners edit one file instead of hunting through components.
+- Each section (Cakes, Custom Cakes, About, Gallery, Reviews, Contact) is its own route; shared shell (navbar, footer, floating WhatsApp, toaster) lives in `__root.tsx`. Why: crawlable per-page metadata.
+- All WhatsApp/tel/maps links are built in `src/lib/whatsapp.ts`. Why: one place for message format and encoding.
