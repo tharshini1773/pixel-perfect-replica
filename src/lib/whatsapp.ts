@@ -19,10 +19,10 @@ export const mapEmbedSrc = (query: string = business.mapQuery) =>
 
 export type OrderDetails = {
   quantity: number;
-  name?: string;
-  date?: string;
-  cakeMessage?: string;
-  notes?: string;
+  name?: string | undefined;
+  date?: string | undefined;
+  cakeMessage?: string | undefined;
+  notes?: string | undefined;
 };
 
 /** The pre-filled WhatsApp message for ordering a cake from the menu. */

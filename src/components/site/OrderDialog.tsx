@@ -15,6 +15,9 @@ const orderSchema = z.object({
   notes: z.string().trim().max(300, "Keep notes under 300 characters").optional(),
 });
 
+type OrderField = keyof z.infer<typeof orderSchema>;
+type FieldErrors = Partial<Record<OrderField, string>>;
+
 type Props = { product: Product | null; onOpenChange: (open: boolean) => void };
 
 export function OrderDialog({ product, onOpenChange }: Props) {
@@ -23,7 +26,7 @@ export function OrderDialog({ product, onOpenChange }: Props) {
   const [date, setDate] = useState("");
   const [cakeMessage, setCakeMessage] = useState("");
   const [notes, setNotes] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<FieldErrors>({});
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -42,8 +45,8 @@ export function OrderDialog({ product, onOpenChange }: Props) {
     if (!product) return;
     const parsed = orderSchema.safeParse({ quantity, name, date, cakeMessage, notes });
     if (!parsed.success) {
-      const errs: Record<string, string> = {};
-      parsed.error.issues.forEach((i) => (errs[String(i.path[0])] = i.message));
+      const errs: FieldErrors = {};
+      parsed.error.issues.forEach((i) => (errs[i.path[0] as OrderField] = i.message));
       setErrors(errs);
       return;
     }

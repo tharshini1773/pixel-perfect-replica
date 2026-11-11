@@ -27,6 +27,8 @@ export function GalleryGrid({ images }: { images: GalleryImage[] }) {
     };
   }, [index, close, step]);
 
+  const current = index === null ? undefined : images[index];
+
   return (
     <>
       <div className="grid grid-flow-dense auto-rows-[160px] grid-cols-2 gap-3 sm:auto-rows-[200px] md:grid-cols-4 md:gap-4 lg:auto-rows-[230px]">
@@ -58,11 +60,11 @@ export function GalleryGrid({ images }: { images: GalleryImage[] }) {
         ))}
       </div>
 
-      {index !== null && (
+      {current && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={images[index].alt}
+          aria-label={current.alt}
           className="fixed inset-0 z-[60] flex items-center justify-center bg-cocoa/90 p-4 backdrop-blur-sm animate-in fade-in"
           onClick={close}
         >
@@ -80,8 +82,8 @@ export function GalleryGrid({ images }: { images: GalleryImage[] }) {
             <ChevronLeft className="h-5 w-5" />
           </button>
           <figure className="max-h-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
-            <img src={images[index].src} alt={images[index].alt} className="max-h-[80dvh] w-auto rounded-3xl object-contain shadow-lift" />
-            <figcaption className="mt-4 text-center text-sm text-cocoa-foreground/85">{images[index].alt}</figcaption>
+            <img src={current.src} alt={current.alt} className="max-h-[80dvh] w-auto rounded-3xl object-contain shadow-lift" />
+            <figcaption className="mt-4 text-center text-sm text-cocoa-foreground/85">{current.alt}</figcaption>
           </figure>
           <button
             onClick={(e) => {

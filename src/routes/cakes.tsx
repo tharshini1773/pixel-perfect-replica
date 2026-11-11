@@ -14,7 +14,7 @@ type CakesSearch = { category?: CategoryId };
 
 export const Route = createFileRoute("/cakes")({
   validateSearch: (search: Record<string, unknown>): CakesSearch => {
-    const c = search.category;
+    const c = search["category"];
     return typeof c === "string" && (categoryIds as string[]).includes(c) ? { category: c as CategoryId } : {};
   },
   head: () => ({

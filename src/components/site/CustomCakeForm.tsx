@@ -26,10 +26,12 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 const empty = { name: "", phone: "", occasion: "", date: "", size: "", flavour: "", details: "" };
+type Field = keyof typeof empty;
+type FieldErrors = Partial<Record<Field, string>>;
 
 export function CustomCakeForm({ defaultOccasion }: { defaultOccasion?: (typeof occasions)[number] }) {
   const [values, setValues] = useState({ ...empty, occasion: defaultOccasion ?? "" });
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState<FormValues | null>(null);
 
   const set = (k: keyof typeof empty) => (e: { target: { value: string } }) =>
@@ -39,8 +41,8 @@ export function CustomCakeForm({ defaultOccasion }: { defaultOccasion?: (typeof 
     e.preventDefault();
     const parsed = schema.safeParse(values);
     if (!parsed.success) {
-      const errs: Record<string, string> = {};
-      parsed.error.issues.forEach((i) => (errs[String(i.path[0])] = i.message));
+      const errs: FieldErrors = {};
+      parsed.error.issues.forEach((i) => (errs[i.path[0] as Field] = i.message));
       setErrors(errs);
       toast.error("Please check the highlighted fields");
       return;
@@ -92,7 +94,7 @@ export function CustomCakeForm({ defaultOccasion }: { defaultOccasion?: (typeof 
     );
   }
 
-  const err = (k: string) => errors[k] && <p className={errorClass}>{errors[k]}</p>;
+  const err = (k: Field) => errors[k] && <p className={errorClass}>{errors[k]}</p>;
 
   return (
     <form onSubmit={submit} noValidate className="grid gap-5 rounded-3xl border border-border bg-card p-6 shadow-card sm:grid-cols-2 md:p-8">
