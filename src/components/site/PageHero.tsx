@@ -20,14 +20,14 @@ export function PageHero({ eyebrow, title, description, image, crumb }: Props) {
           {description && <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">{description}</p>}
         </div>
         {image && (
-          <div className="relative hidden md:block">
-            <div className="absolute -inset-4 rounded-[2.5rem] bg-blush rotate-3" aria-hidden />
+          <div className="relative mt-2 md:mt-0">
+            <div className="absolute -inset-3 rounded-[2.5rem] bg-blush/60 rotate-2 sm:-inset-4 sm:rotate-3" aria-hidden />
             <img
               src={image}
               alt=""
               width={1024}
               height={1024}
-              className="relative aspect-[4/3] w-full rounded-[2rem] object-cover shadow-lift"
+              className="relative aspect-[16/10] sm:aspect-[4/3] w-full rounded-[2rem] object-cover shadow-lift"
             />
           </div>
         )}

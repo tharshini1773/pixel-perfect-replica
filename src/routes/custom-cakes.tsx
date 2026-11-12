@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CalendarHeart, Gift, Heart, MessageSquareText, PencilRuler, CakeSlice, Truck } from "lucide-react";
 import { PageHero } from "@/components/site/PageHero";
 import { SectionHeading } from "@/components/site/SectionHeading";
-import { CustomCakeForm } from "@/components/site/CustomCakeForm";
+import { CakeEnquiryForm } from "@/components/site/CakeEnquiryForm";
 import { ContactActions } from "@/components/site/ContactDetails";
 import { Reveal } from "@/components/site/Reveal";
 import { pageMeta } from "@/lib/seo";
@@ -102,7 +102,7 @@ function CustomCakesPage() {
               usually need a little more time.
             </p>
           </div>
-          <CustomCakeForm />
+          <CakeEnquiryForm preselectedCakeType="Customised Cakes" />
         </div>
       </section>
     </>

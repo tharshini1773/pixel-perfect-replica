@@ -1,5 +1,5 @@
 /**
- * Business information — EDIT THESE PLACEHOLDERS with your real shop details.
+ * Business information — Real shop details for Sweet Crumbs Bakery.
  * Everything on the site (header, footer, contact page, WhatsApp/call buttons,
  * map) reads from this one file.
  */
@@ -8,33 +8,36 @@ export const business = {
   shortName: "Sweet Crumbs",
   tagline: "Handcrafted cakes for every celebration",
 
-  // Full shop address shown on the site.
-  address: "[Shop No.], [Street Name], [Area], [City] – [PIN Code]",
+  // Exact physical shop address
+  address: "1/589F, 100 House, Punnaikayal, Thoothukudi, Tamil Nadu, India.",
+  shortAddress: "1/589F, 100 House, Punnaikayal, Thoothukudi",
+  area: "Punnaikayal, Thoothukudi, Tamil Nadu",
 
-  // Phone number as shown to visitors, and the dialable version (with country code, no spaces).
-  phoneDisplay: "+91 00000 00000",
-  phoneDial: "+910000000000",
+  // Phone number: clickable for mobile dialer
+  phoneDisplay: "+91 75503 62608",
+  phoneRaw: "7550362608",
+  phoneDial: "tel:7550362608",
 
-  // WhatsApp number: digits only, with country code, no "+" or spaces (e.g. 919876543210).
-  whatsappNumber: "910000000000",
-  whatsappDisplay: "+91 00000 00000",
+  // WhatsApp number: digits with country code
+  whatsappNumber: "917550362608",
+  whatsappDisplay: "+91 75503 62608",
 
-  email: "hello@yourbakery.com",
+  // Shop owner's email address
+  email: "tharshini1773@gmail.com",
 
-  // Opening hours shown on the contact page and footer.
+  // Opening hours shown on contact page, location section and footer
   hours: [
-    { days: "Monday – Friday", time: "[Opening time] – [Closing time]" },
-    { days: "Saturday – Sunday", time: "[Opening time] – [Closing time]" },
+    { days: "Monday – Saturday", time: "9:00 AM – 9:30 PM" },
+    { days: "Sunday", time: "9:00 AM – 10:00 PM" },
   ],
 
-  // Text used to place the map pin and the "Get Directions" link.
-  // Replace with your shop's name + full address, or its exact Google Maps name.
-  mapQuery: "India",
+  // Exact Google Maps destination query
+  mapQuery: "1/589F, 100 House, Punnaikayal, Thoothukudi, Tamil Nadu, India",
 
   social: {
-    instagram: "https://instagram.com/",
-    facebook: "https://facebook.com/",
-    youtube: "https://youtube.com/",
+    instagram: "https://instagram.com/sweetcrumbsbakery",
+    facebook: "https://facebook.com/sweetcrumbsbakery",
+    youtube: "https://youtube.com/@sweetcrumbsbakery",
   },
 } as const;
 

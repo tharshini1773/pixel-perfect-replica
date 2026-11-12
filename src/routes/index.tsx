@@ -1,10 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, CalendarHeart, Gift, Heart, Leaf, Palette } from "lucide-react";
+import { ArrowRight, CalendarHeart, Gift, Heart, Leaf, Palette, Sparkles, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Hero } from "@/components/site/Hero";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { CategoryGrid } from "@/components/site/CategoryGrid";
 import { CakeGrid } from "@/components/site/CakeGrid";
+import { CakeImageSlider } from "@/components/site/CakeImageSlider";
+import { LocationSection } from "@/components/site/LocationSection";
+import { CakeEnquiryForm } from "@/components/site/CakeEnquiryForm";
 import { WhyChooseUs } from "@/components/site/WhyChooseUs";
 import { GalleryGrid } from "@/components/site/GalleryGrid";
 import { ReviewsGrid } from "@/components/site/Reviews";
@@ -12,6 +15,7 @@ import { CtaBanner } from "@/components/site/CtaBanner";
 import { Reveal } from "@/components/site/Reveal";
 import { products } from "@/config/products";
 import { gallery, reviews } from "@/config/content";
+import { business } from "@/config/business";
 import { pageMeta } from "@/lib/seo";
 import customCake from "@/assets/cake-custom.jpg";
 import anniversary from "@/assets/cake-anniversary.jpg";
@@ -20,8 +24,8 @@ import baker from "@/assets/about-baker.jpg";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: pageMeta(
-      "Sweet Crumbs Bakery — Every Celebration Deserves a Beautiful Cake",
-      "Handcrafted birthday, wedding, chocolate, red velvet, photo and custom cakes from ₹450. Baked fresh and easy to order on WhatsApp.",
+      `${business.name} — Every Celebration Deserves a Beautiful Cake`,
+      `Handcrafted birthday, wedding, chocolate, red velvet, photo and custom cakes from ₹450. Baked fresh in Punnaikayal, Thoothukudi. Easy WhatsApp & email enquiries to ${business.email}.`,
     ),
   }),
   component: Index,
@@ -34,12 +38,30 @@ function Index() {
     <>
       <Hero />
 
+      {/* Featured Cake Image Slider with Prev/Next Controls */}
+      <section className="section-y bg-gradient-blush">
+        <div className="container-page">
+          <SectionHeading
+            eyebrow="Trending Bakes"
+            title={
+              <>
+                Signature Creations <em className="text-rose font-medium">Fresh from Our Oven</em>
+              </>
+            }
+            description="Swipe through our most celebrated cake designs — baked to order with premium ingredients."
+          />
+          <div className="mt-12">
+            <CakeImageSlider />
+          </div>
+        </div>
+      </section>
+
       {/* Categories */}
       <section className="section-y container-page">
         <SectionHeading
-          eyebrow="Cake categories"
-          title={<>Something sweet for <em className="text-rose">every</em> occasion</>}
-          description="From birthday sprinkles to elegant wedding tiers — explore our most-loved cake collections."
+          eyebrow="10 Cake Categories"
+          title={<>Something sweet for <em className="text-rose font-medium">every</em> occasion</>}
+          description="From birthday sprinkles and wedding tiers to rich chocolate, red velvet and photo cakes — explore our 10 handcrafted collections."
         />
         <div className="mt-14">
           <CategoryGrid />
@@ -54,7 +76,7 @@ function Index() {
               align="left"
               eyebrow="Customer favourites"
               title="Our signature cakes"
-              description="Tap Order Now to send your order straight to us on WhatsApp."
+              description="Tap Order Now to send your order straight to us on WhatsApp or call our bakery."
             />
             <Button asChild variant="outline" size="lg">
               <Link to="/cakes">
@@ -101,12 +123,59 @@ function Index() {
                 </li>
               ))}
             </ul>
-            <Button asChild variant="rose" size="lg" className="mt-8">
-              <Link to="/custom-cakes">
-                Start a custom order <ArrowRight />
-              </Link>
-            </Button>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Button asChild variant="rose" size="lg">
+                <Link to="/custom-cakes">
+                  Start a custom order <ArrowRight />
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="lg">
+                <a href="#enquiry">
+                  <Mail className="h-4 w-4" /> Email Enquiry
+                </a>
+              </Button>
+            </div>
           </Reveal>
+        </div>
+      </section>
+
+      {/* Online Cake Enquiry Section */}
+      <section id="enquiry" className="section-y bg-gradient-blush">
+        <div className="container-page">
+          <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+            <Reveal>
+              <SectionHeading
+                align="left"
+                eyebrow="Direct Email Booking"
+                title="Send a Cake Enquiry"
+                description={`Got a special request or event date in mind? Send an enquiry directly to our email (${business.email}). We reply promptly with design options and pricing.`}
+              />
+              <div className="mt-8 space-y-4">
+                <div className="flex items-start gap-3.5 rounded-2xl bg-card p-4 shadow-soft border border-border">
+                  <Sparkles className="h-5 w-5 text-rose shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold text-primary text-sm">Personalized Service</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Eggless, sugar-free, multi-tier and custom flavours available on request.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3.5 rounded-2xl bg-card p-4 shadow-soft border border-border">
+                  <Mail className="h-5 w-5 text-rose shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold text-primary text-sm">Owner's Inbox</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      All enquiries delivered to <strong>{business.email}</strong>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+
+            <Reveal delay={120}>
+              <CakeEnquiryForm />
+            </Reveal>
+          </div>
         </div>
       </section>
 
@@ -123,7 +192,7 @@ function Index() {
                 align="left"
                 eyebrow="Our story"
                 title="Baked with love, served with joy"
-                description="At Sweet Crumbs, every cake begins with real butter, fresh cream and fine chocolate. We bake in small batches so each order is fresh, beautiful and full of flavour."
+                description="At Sweet Crumbs, every cake begins with real butter, fresh cream and fine chocolate. We bake in small batches in Punnaikayal so each order is fresh, beautiful and full of flavour."
               />
               <div className="mt-8 flex items-center gap-3 text-sm text-cocoa-foreground/80">
                 <Leaf className="h-5 w-5 text-blush" /> Quality ingredients · No shortcuts · Baked to order
@@ -152,9 +221,12 @@ function Index() {
           </Button>
         </div>
         <div className="mt-12">
-          <GalleryGrid images={gallery.slice(0, 6)} />
+          <GalleryGrid images={gallery.slice(0, 8)} showFilters={false} />
         </div>
       </section>
+
+      {/* Actual Shop Location Section with Google Maps */}
+      <LocationSection />
 
       {/* Reviews preview */}
       <section className="section-y bg-gradient-blush">

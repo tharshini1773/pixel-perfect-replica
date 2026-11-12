@@ -1,8 +1,8 @@
 export const navLinks = [
   { to: "/", label: "Home" },
+  { to: "/about", label: "About Us" },
   { to: "/cakes", label: "Cakes" },
-  { to: "/about", label: "About" },
   { to: "/gallery", label: "Gallery" },
-  { to: "/reviews", label: "Reviews" },
-  { to: "/contact", label: "Contact" },
+  { to: "/location", label: "Location" },
+  { to: "/contact", label: "Contact Us" },
 ] as const;

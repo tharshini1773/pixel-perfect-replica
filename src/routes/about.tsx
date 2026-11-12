@@ -1,5 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Egg, Leaf, Milk, Wheat, Clock3, HeartHandshake } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Egg, Leaf, Milk, Wheat, Clock3, HeartHandshake, MapPin } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PageHero } from "@/components/site/PageHero";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { WhyChooseUs } from "@/components/site/WhyChooseUs";
@@ -72,6 +73,18 @@ function AboutPage() {
                   <p className="text-sm text-muted-foreground">Personal service for every order.</p>
                 </div>
               </div>
+            </div>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Button asChild variant="rose" size="lg">
+                <Link to="/location">
+                  Visit Bakery in Punnaikayal <MapPin className="h-4 w-4 ml-1" />
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="lg">
+                <Link to="/contact">
+                  Contact Us
+                </Link>
+              </Button>
             </div>
           </Reveal>
         </div>

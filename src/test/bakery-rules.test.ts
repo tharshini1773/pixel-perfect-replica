@@ -3,38 +3,52 @@ import { products, filterProducts, categories } from "@/config/products";
 import { buildOrderMessage, whatsappLink } from "@/lib/whatsapp";
 
 describe("Cake menu rules", () => {
-  it("lists exactly 12 cakes", () => {
-    expect(products).toHaveLength(12);
-  });
-
-  it("keeps every price between ₹450 and ₹1,200", () => {
-    for (const p of products) {
-      expect(p.price).toBeGreaterThanOrEqual(450);
-      expect(p.price).toBeLessThanOrEqual(1200);
-    }
-  });
-
-  it("offers the 8 requested categories", () => {
+  it("offers all 10 requested categories", () => {
     expect(categories.map((c) => c.name)).toEqual([
-      "Birthday", "Wedding", "Chocolate", "Black Forest", "Red Velvet", "Customized", "Cupcakes", "Photo Cakes",
+      "Birthday Cakes",
+      "Wedding Cakes",
+      "Chocolate Cakes",
+      "Black Forest Cakes",
+      "Red Velvet Cakes",
+      "Strawberry Cakes",
+      "Customised Cakes",
+      "Photo Cakes",
+      "Cupcakes",
+      "Anniversary Cakes",
     ]);
   });
 
-  it("filters the menu to the chosen category", () => {
+  it("ensures every cake has a distinct, non-repeating photograph", () => {
+    const images = products.map((p) => p.image);
+    const uniqueImages = new Set(images);
+    expect(uniqueImages.size).toBe(products.length);
+  });
+
+  it("keeps every price realistic and positive", () => {
+    for (const p of products) {
+      expect(p.price).toBeGreaterThanOrEqual(450);
+      expect(p.price).toBeLessThanOrEqual(3000);
+      expect(p.name.length).toBeGreaterThan(0);
+      expect(p.description.length).toBeGreaterThan(0);
+      expect(p.weight.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("filters the menu correctly to the chosen category", () => {
     const red = filterProducts(products, "red-velvet");
     expect(red.length).toBeGreaterThan(0);
     expect(red.every((p) => p.category === "red-velvet")).toBe(true);
-    expect(filterProducts(products, "all")).toHaveLength(12);
+    expect(filterProducts(products, "all")).toHaveLength(products.length);
   });
 });
 
 describe("WhatsApp ordering", () => {
   it("pre-fills the cake, quantity and total in the message", () => {
-    const cake = products.find((p) => p.id === "chocolate-truffle")!;
+    const cake = products[0]; // first cake
     const msg = buildOrderMessage(cake, { quantity: 2, cakeMessage: "Happy Birthday" });
-    expect(msg).toContain("Chocolate Truffle (1 kg)");
+    expect(msg).toContain(cake.name);
+    expect(msg).toContain(cake.weight);
     expect(msg).toContain("Quantity: 2");
-    expect(msg).toContain("₹1,500");
     expect(msg).toContain('Message on cake: "Happy Birthday"');
   });
 

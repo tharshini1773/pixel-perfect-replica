@@ -1,14 +1,15 @@
 import { useMemo } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, Palette } from "lucide-react";
+import { ArrowRight, Palette, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHero } from "@/components/site/PageHero";
 import { CategoryFilter } from "@/components/site/CategoryFilter";
 import { CakeGrid } from "@/components/site/CakeGrid";
+import { CakeImageSlider } from "@/components/site/CakeImageSlider";
 import { CtaBanner } from "@/components/site/CtaBanner";
 import { categories, categoryIds, filterProducts, getCategoryName, products, type CategoryId } from "@/config/products";
 import { pageMeta } from "@/lib/seo";
-import chocolate from "@/assets/cake-chocolate.jpg";
+import { business } from "@/config/business";
 
 type CakesSearch = { category?: CategoryId };
 
@@ -19,8 +20,8 @@ export const Route = createFileRoute("/cakes")({
   },
   head: () => ({
     meta: pageMeta(
-      "Cake Menu & Prices — Sweet Crumbs Bakery",
-      "Browse 12 handcrafted cakes from ₹450 to ₹1,200: birthday, wedding, chocolate, black forest, red velvet, cupcakes and photo cakes.",
+      `Cake Menu & Handcrafted Prices — ${business.name}`,
+      `Explore 20 handcrafted cakes across 10 categories: Birthday, Wedding, Chocolate, Black Forest, Red Velvet, Strawberry, Customised, Photo cakes, Cupcakes and Anniversary cakes from ₹450 to ₹2,400.`,
     ),
   }),
   component: CakesPage,
@@ -43,11 +44,29 @@ function CakesPage() {
     <>
       <PageHero
         crumb="Cakes"
-        eyebrow="Our menu"
+        eyebrow="Our artisan menu"
         title="Handcrafted cakes, baked fresh to order"
-        description="Choose your favourite, tap Order Now and send your order to us on WhatsApp in seconds."
-        image={chocolate}
+        description="Choose your favourite, tap Order Now to send your order on WhatsApp or call our shop directly."
+        image="https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=1200&q=80"
       />
+
+      {/* Featured Spotlight Slider */}
+      <section className="pt-12 sm:pt-16 container-page">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-rose">
+              <Sparkles className="h-3.5 w-3.5" /> Featured Spotlight
+            </span>
+            <h2 className="font-display text-2xl font-semibold text-primary mt-1">
+              Top Trending Cakes
+            </h2>
+          </div>
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            Slide with arrows to explore designs
+          </span>
+        </div>
+        <CakeImageSlider />
+      </section>
 
       <section className="section-y container-page">
         <CategoryFilter

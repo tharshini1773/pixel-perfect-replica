@@ -7,7 +7,7 @@ export function whatsappLink(message: string, number: string = business.whatsapp
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
-export const telLink = (phone: string = business.phoneDial) => `tel:${phone.replace(/[^\d+]/g, "")}`;
+export const telLink = (phone: string = business.phoneRaw || "7550362608") => `tel:${phone.replace(/[^\d+]/g, "")}`;
 
 export const mailLink = (email: string = business.email) => `mailto:${email}`;
 
@@ -15,7 +15,7 @@ export const directionsLink = (query: string = business.mapQuery) =>
   `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}`;
 
 export const mapEmbedSrc = (query: string = business.mapQuery) =>
-  `https://www.google.com/maps?q=${encodeURIComponent(query)}&output=embed`;
+  `https://maps.google.com/maps?q=${encodeURIComponent(query)}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
 
 export type OrderDetails = {
   quantity: number;

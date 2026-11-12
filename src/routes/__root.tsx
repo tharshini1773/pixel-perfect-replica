@@ -82,10 +82,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Sweet Crumbs Bakery — Handcrafted Cakes for Every Celebration" },
+      { title: "Sweet Crumbs Bakery — Handcrafted Cakes in Punnaikayal, Thoothukudi" },
       {
         name: "description",
-        content: "Birthday, wedding, chocolate and custom cakes baked fresh. Order easily on WhatsApp.",
+        content: "Birthday, wedding, chocolate, red velvet, photo and custom cakes baked fresh in Punnaikayal, Thoothukudi. Easy WhatsApp orders and online enquiries.",
       },
       { property: "og:site_name", content: "Sweet Crumbs Bakery" },
       { property: "og:type", content: "website" },

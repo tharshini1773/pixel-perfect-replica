@@ -15,6 +15,7 @@ import { Route as CakesRouteImport } from './routes/cakes'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CustomCakesRouteImport } from './routes/custom-cakes'
 import { Route as GalleryRouteImport } from './routes/gallery'
+import { Route as LocationRouteImport } from './routes/location'
 import { Route as ReviewsRouteImport } from './routes/reviews'
 
 const IndexRoute = IndexRouteImport.update({
@@ -47,6 +48,11 @@ const GalleryRoute = GalleryRouteImport.update({
   path: '/gallery',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LocationRoute = LocationRouteImport.update({
+  id: '/location',
+  path: '/location',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReviewsRoute = ReviewsRouteImport.update({
   id: '/reviews',
   path: '/reviews',
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/custom-cakes': typeof CustomCakesRoute
   '/gallery': typeof GalleryRoute
+  '/location': typeof LocationRoute
   '/reviews': typeof ReviewsRoute
 }
 export interface FileRoutesByTo {
@@ -69,6 +76,7 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/custom-cakes': typeof CustomCakesRoute
   '/gallery': typeof GalleryRoute
+  '/location': typeof LocationRoute
   '/reviews': typeof ReviewsRoute
 }
 export interface FileRoutesById {
@@ -79,6 +87,7 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/custom-cakes': typeof CustomCakesRoute
   '/gallery': typeof GalleryRoute
+  '/location': typeof LocationRoute
   '/reviews': typeof ReviewsRoute
 }
 export interface FileRouteTypes {
@@ -90,6 +99,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/custom-cakes'
     | '/gallery'
+    | '/location'
     | '/reviews'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/custom-cakes'
     | '/gallery'
+    | '/location'
     | '/reviews'
   id:
     | '__root__'
@@ -108,6 +119,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/custom-cakes'
     | '/gallery'
+    | '/location'
     | '/reviews'
   fileRoutesById: FileRoutesById
 }
@@ -118,6 +130,7 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   CustomCakesRoute: typeof CustomCakesRoute
   GalleryRoute: typeof GalleryRoute
+  LocationRoute: typeof LocationRoute
   ReviewsRoute: typeof ReviewsRoute
 }
 
@@ -165,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GalleryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/location': {
+      id: '/location'
+      path: '/location'
+      fullPath: '/location'
+      preLoaderRoute: typeof LocationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reviews': {
       id: '/reviews'
       path: '/reviews'
@@ -182,6 +202,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   CustomCakesRoute: CustomCakesRoute,
   GalleryRoute: GalleryRoute,
+  LocationRoute: LocationRoute,
   ReviewsRoute: ReviewsRoute,
 }
 export const routeTree = rootRouteImport

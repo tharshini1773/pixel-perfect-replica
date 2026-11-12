@@ -22,10 +22,10 @@ function ReviewsPage() {
     <>
       <PageHero
         crumb="Reviews"
-        eyebrow="Reviews"
+        eyebrow="Customer Reviews"
         title="Loved in every slice"
-        description="Kind words from the families, couples and teams we've baked for."
-        image={redvelvet}
+        description="Kind words from families, couples and celebrations we've baked for in Punnaikayal & Thoothukudi."
+        image="https://images.unsplash.com/photo-1616541823729-00fe0aacd32c?auto=format&fit=crop&w=1200&q=80"
       />
       <section className="section-y container-page">
         <div className="mx-auto mb-14 flex max-w-md flex-col items-center rounded-3xl border border-border bg-card p-8 text-center shadow-card">

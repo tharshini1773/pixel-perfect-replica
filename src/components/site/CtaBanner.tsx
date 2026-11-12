@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { MessageCircle, ShoppingBag } from "lucide-react";
+import { MessageCircle, ShoppingBag, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { whatsappLink, generalOrderMessage } from "@/lib/whatsapp";
+import { whatsappLink, generalOrderMessage, telLink } from "@/lib/whatsapp";
+import { business } from "@/config/business";
 import { Reveal } from "./Reveal";
 
 export function CtaBanner({
@@ -18,7 +19,7 @@ export function CtaBanner({
             <span className="eyebrow justify-center text-blush">Order today</span>
             <h2 className="mt-4 text-balance text-3xl font-medium leading-tight text-cocoa-foreground md:text-5xl">{title}</h2>
             <p className="mt-5 text-cocoa-foreground/75 md:text-lg">{text}</p>
-            <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
+            <div className="mt-9 flex flex-wrap justify-center gap-3">
               <Button asChild variant="cream" size="xl">
                 <Link to="/cakes">
                   <ShoppingBag /> Browse Cakes
@@ -27,6 +28,11 @@ export function CtaBanner({
               <Button asChild variant="whatsapp" size="xl">
                 <a href={whatsappLink(generalOrderMessage())} target="_blank" rel="noopener noreferrer">
                   <MessageCircle /> WhatsApp Us
+                </a>
+              </Button>
+              <Button asChild variant="outline-light" size="xl">
+                <a href={telLink()}>
+                  <Phone className="h-4 w-4" /> Call: {business.phoneDisplay}
                 </a>
               </Button>
             </div>
