@@ -22,6 +22,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useBakeryStore } from "@/context/BakeryStoreContext";
 import { Logo } from "@/components/site/Logo";
 import { Button } from "@/components/ui/button";
+import { AdminAuthStage } from "./AdminAuthStage";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -38,12 +39,6 @@ export function AdminLayout({ children, title, subtitle, action }: AdminLayoutPr
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const pendingOrdersCount = orders.filter((o) => o.status === "pending").length;
-
-  useEffect(() => {
-    if (!loading && (!user || !isAdmin)) {
-      navigate({ to: "/admin/login" });
-    }
-  }, [user, isAdmin, loading, navigate]);
 
   const navItems = [
     { to: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -62,7 +57,6 @@ export function AdminLayout({ children, title, subtitle, action }: AdminLayoutPr
 
   const handleLogout = async () => {
     await logout();
-    navigate({ to: "/admin/login" });
   };
 
   if (loading) {
@@ -85,7 +79,12 @@ export function AdminLayout({ children, title, subtitle, action }: AdminLayoutPr
   }
 
   if (!user || !isAdmin) {
-    return null;
+    return (
+      <AdminAuthStage
+        title="Admin Authentication"
+        subtitle="Please enter your administrator login and password to access the bakery management dashboard."
+      />
+    );
   }
 
   return (

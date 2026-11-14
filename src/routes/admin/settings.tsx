@@ -105,7 +105,6 @@ function AdminSettingsPage() {
 
   const handleLogout = async () => {
     await logout();
-    navigate({ to: "/admin/login" });
   };
 
   return (
