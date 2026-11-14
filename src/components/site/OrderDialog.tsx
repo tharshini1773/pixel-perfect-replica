@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { formatINR, getCategoryName, type Product } from "@/config/products";
 import { buildOrderMessage, telLink, whatsappLink } from "@/lib/whatsapp";
+import { useBakeryStore } from "@/context/BakeryStoreContext";
+import { business } from "@/config/business";
 import { fieldClass, labelClass, textareaClass, errorClass } from "./form-styles";
 
 const orderSchema = z.object({
@@ -21,6 +23,7 @@ type FieldErrors = Partial<Record<OrderField, string>>;
 type Props = { product: Product | null; onOpenChange: (open: boolean) => void };
 
 export function OrderDialog({ product, onOpenChange }: Props) {
+  const { createOrder } = useBakeryStore();
   const [quantity, setQuantity] = useState(1);
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
@@ -51,6 +54,27 @@ export function OrderDialog({ product, onOpenChange }: Props) {
       return;
     }
     setErrors({});
+
+    // Automatically record order in bakery store for the admin panel
+    createOrder({
+      customerName: parsed.data.name?.trim() || "Store Customer",
+      customerPhone: business.phone,
+      deliveryDate: parsed.data.date,
+      cakeMessage: parsed.data.cakeMessage,
+      notes: parsed.data.notes,
+      totalAmount: product.price * quantity,
+      items: [
+        {
+          id: `item-${Date.now()}`,
+          productId: product.id,
+          productName: product.name,
+          price: product.price,
+          quantity,
+          total: product.price * quantity,
+        },
+      ],
+    });
+
     window.open(whatsappLink(buildOrderMessage(product, parsed.data)), "_blank", "noopener,noreferrer");
   };
 

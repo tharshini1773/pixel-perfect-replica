@@ -7,7 +7,8 @@ import { CategoryFilter } from "@/components/site/CategoryFilter";
 import { CakeGrid } from "@/components/site/CakeGrid";
 import { CakeImageSlider } from "@/components/site/CakeImageSlider";
 import { CtaBanner } from "@/components/site/CtaBanner";
-import { categories, categoryIds, filterProducts, getCategoryName, products, type CategoryId } from "@/config/products";
+import { categories, categoryIds, filterProducts, getCategoryName, products as staticProducts, type CategoryId, type Product } from "@/config/products";
+import { useBakeryStore } from "@/context/BakeryStoreContext";
 import { pageMeta } from "@/lib/seo";
 import { business } from "@/config/business";
 
@@ -28,17 +29,34 @@ export const Route = createFileRoute("/cakes")({
 });
 
 function CakesPage() {
+  const { products: storeProducts, categories: storeCategories } = useBakeryStore();
   const { category } = Route.useSearch();
   const navigate = useNavigate({ from: "/cakes" });
   const active = category ?? "all";
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: products.length };
-    categories.forEach((cat) => (c[cat.id] = products.filter((p) => p.category === cat.id).length));
-    return c;
-  }, []);
+  // Active products in store (falls back to static products if loading)
+  const activeProducts: Product[] = (storeProducts.length ? storeProducts : staticProducts)
+    .filter((p) => p.isAvailable !== false)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category as any,
+      description: p.description,
+      weight: p.weight,
+      price: p.price,
+      image: p.image,
+      tag: p.tag as any,
+    }));
 
-  const items = filterProducts(products, active);
+  const activeCategories = storeCategories.length ? storeCategories : categories;
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: activeProducts.length };
+    activeCategories.forEach((cat) => (c[cat.id] = activeProducts.filter((p) => p.category === cat.id).length));
+    return c;
+  }, [activeProducts, activeCategories]);
+
+  const items = filterProducts(activeProducts, active);
 
   return (
     <>

@@ -5,6 +5,7 @@ import { CheckCircle2, AlertCircle, Loader2, Mail, MessageCircle, Send, Calendar
 import { Button } from "@/components/ui/button";
 import { business } from "@/config/business";
 import { whatsappLink } from "@/lib/whatsapp";
+import { useBakeryStore } from "@/context/BakeryStoreContext";
 import { errorClass, fieldClass, labelClass, textareaClass } from "./form-styles";
 
 export const cakeTypes = [
@@ -76,6 +77,7 @@ export function CakeEnquiryForm({
   preselectedCakeType?: string;
   className?: string;
 }) {
+  const { createOrder } = useBakeryStore();
   const [values, setValues] = useState<EnquiryValues>({
     ...initialValues,
     cakeType: preselectedCakeType ?? "",
@@ -115,6 +117,25 @@ export function CakeEnquiryForm({
     setIsSubmitting(true);
 
     const data = validation.data;
+
+    // Record inquiry into bakery store orders for admin management
+    createOrder({
+      customerName: data.customerName,
+      customerEmail: data.email,
+      customerPhone: data.phone,
+      deliveryDate: data.deliveryDate,
+      notes: `${data.cakeType} (${data.cakeQuantity}). Notes: ${data.message}`,
+      totalAmount: 850,
+      items: [
+        {
+          id: `item-${Date.now()}`,
+          productName: `${data.cakeType} (${data.cakeQuantity})`,
+          price: 850,
+          quantity: 1,
+          total: 850,
+        },
+      ],
+    });
 
     try {
       // Send customer enquiry to tharshini1773@gmail.com using standard JSON form endpoint

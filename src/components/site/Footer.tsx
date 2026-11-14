@@ -107,6 +107,11 @@ export function Footer() {
               </Link>
             </li>
             <li>
+              <Link to="/admin/login" className="transition-colors hover:text-blush flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose inline-block" /> Admin Portal
+              </Link>
+            </li>
+            <li>
               <a href="#location" className="transition-colors hover:text-blush">
                 Bakery Location
               </a>

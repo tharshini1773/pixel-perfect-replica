@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useLocation,
   HeadContent,
   Scripts,
   type ErrorComponentProps,
@@ -13,8 +14,11 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { Navbar } from "@/components/site/Navbar";
 import { Footer } from "@/components/site/Footer";
+import { PromoBanner } from "@/components/site/PromoBanner";
 import { FloatingWhatsApp } from "@/components/site/FloatingWhatsApp";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/context/AuthContext";
+import { BakeryStoreProvider } from "@/context/BakeryStoreContext";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
@@ -130,19 +134,31 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const location = useLocation();
+  const isAdmin = location.pathname.startsWith("/admin");
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <div className="flex min-h-screen flex-col">
-        <Navbar />
-        <main className="flex-1">
-          <Outlet />
-        </main>
-        <Footer />
-      </div>
-      <FloatingWhatsApp />
-      <Toaster position="top-center" richColors />
+      <AuthProvider>
+        <BakeryStoreProvider>
+          {isAdmin ? (
+            <div className="min-h-screen bg-[#FAF7F2] font-sans antialiased text-[#1A100C]">
+              <Outlet />
+            </div>
+          ) : (
+            <div className="flex min-h-screen flex-col bg-background font-sans text-foreground">
+              <PromoBanner />
+              <Navbar />
+              <main className="flex-1">
+                <Outlet />
+              </main>
+              <Footer />
+              <FloatingWhatsApp />
+            </div>
+          )}
+          <Toaster position="top-center" richColors />
+        </BakeryStoreProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

@@ -13,7 +13,8 @@ import { GalleryGrid } from "@/components/site/GalleryGrid";
 import { ReviewsGrid } from "@/components/site/Reviews";
 import { CtaBanner } from "@/components/site/CtaBanner";
 import { Reveal } from "@/components/site/Reveal";
-import { products } from "@/config/products";
+import { products as staticProducts, type Product } from "@/config/products";
+import { useBakeryStore } from "@/context/BakeryStoreContext";
 import { gallery, reviews } from "@/config/content";
 import { business } from "@/config/business";
 import { pageMeta } from "@/lib/seo";
@@ -31,9 +32,26 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const featured = products.filter((p) => p.tag).slice(0, 6);
-
 function Index() {
+  const { products: storeProducts } = useBakeryStore();
+  const activeProducts = (storeProducts.length ? storeProducts : staticProducts).filter(
+    (p) => p.isAvailable !== false,
+  );
+  const featured: Product[] = (
+    activeProducts.filter((p) => p.tag).length ? activeProducts.filter((p) => p.tag) : activeProducts
+  )
+    .slice(0, 6)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category as any,
+      description: p.description,
+      weight: p.weight,
+      price: p.price,
+      image: p.image,
+      tag: p.tag as any,
+    }));
+
   return (
     <>
       <Hero />
