@@ -27,10 +27,12 @@ function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // If already authenticated as admin, allow immediate jump to dashboard
-  if (user && user.role === "admin") {
-    navigate({ to: "/admin" });
-  }
+  // Safely redirect to dashboard when authenticated (inside useEffect, never during render)
+  useEffect(() => {
+    if (user && user.role === "admin") {
+      navigate({ to: "/admin" });
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
