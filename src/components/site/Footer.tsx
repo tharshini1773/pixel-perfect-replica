@@ -102,6 +102,11 @@ export function Footer() {
               </Link>
             </li>
             <li>
+              <Link to="/brand" className="transition-colors hover:text-blush">
+                Brand Identity & Logos
+              </Link>
+            </li>
+            <li>
               <a href="#location" className="transition-colors hover:text-blush">
                 Bakery Location
               </a>

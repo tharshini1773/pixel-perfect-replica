@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" width="280" height="64">
+  <defs>
+    <!-- Background Gradient: Rich Velvet Rose to Deep Berry -->
+    <linearGradient id="roseGradientMain" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E85D75"/>
+      <stop offset="60%" stop-color="#C23854"/>
+      <stop offset="100%" stop-color="#8F1D35"/>
+    </linearGradient>
+
+    <!-- Warm Golden Flame Gradient -->
+    <linearGradient id="goldGradientMain" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF0B8"/>
+      <stop offset="50%" stop-color="#F5C362"/>
+      <stop offset="100%" stop-color="#D99426"/>
+    </linearGradient>
+
+    <!-- Subtle Frosting Highlight Gradient -->
+    <linearGradient id="frostingGradientMain" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#FFF2EC"/>
+    </linearGradient>
+
+    <!-- Drop Shadow for Icon -->
+    <filter id="iconShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#4A0E1A" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- ICON BADGE (48x48 at x=8, y=8) -->
+  <g transform="translate(8, 8)">
+    <!-- Squircle Base Badge with smooth corner radius -->
+    <rect x="0" y="0" width="48" height="48" rx="14" fill="url(#roseGradientMain)"/>
+    
+    <!-- Subtle Inner Border for High-End Glass/Enamel Finish -->
+    <rect x="0.75" y="0.75" width="46.5" height="46.5" rx="13.25" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1.2"/>
+
+    <!-- Cake Icon Elements -->
+    <g filter="url(#iconShadow)">
+      <!-- Base Tier -->
+      <path d="M11.5 33.5 C11.5 31.5 13.1 30 15.2 30 L32.8 30 C34.9 30 36.5 31.5 36.5 33.5 C36.5 35.5 34.9 37 32.8 37 L15.2 37 C13.1 37 11.5 35.5 11.5 33.5 Z" fill="url(#frostingGradientMain)"/>
+      <path d="M15 33.5 Q20 35 24 33.5 Q28 32 33 33.5" fill="none" stroke="#E85D75" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+
+      <!-- Middle Tier -->
+      <path d="M15.5 23.5 C15.5 21.8 16.9 20.5 18.8 20.5 L29.2 20.5 C31.1 20.5 32.5 21.8 32.5 23.5 C32.5 25.2 31.1 26.5 29.2 26.5 L18.8 26.5 C16.9 26.5 15.5 25.2 15.5 23.5 Z" fill="url(#frostingGradientMain)"/>
+
+      <!-- Celebration Star Spark -->
+      <path d="M24 8 C24 11 25.6 12.7 28.5 13 C25.6 13.3 24 15 24 18 C24 15 22.4 13.3 19.5 13 C22.4 12.7 24 11 24 8 Z" fill="url(#goldGradientMain)"/>
+
+      <!-- Micro Artisan Crumbs -->
+      <circle cx="35" cy="19" r="1.3" fill="url(#goldGradientMain)"/>
+      <circle cx="12.5" cy="21.5" r="1" fill="url(#goldGradientMain)" opacity="0.85"/>
+    </g>
+  </g>
+
+  <!-- TYPOGRAPHY LOCKUP -->
+  <g transform="translate(70, 0)">
+    <!-- Primary Wordmark: Sweet Crumbs -->
+    <text x="0" y="34" font-family="'Fraunces', Georgia, serif" font-size="24" font-weight="600" font-style="normal" letter-spacing="-0.02em" fill="#24140E">
+      Sweet Crumbs
+    </text>
+
+    <!-- Subtitle: ARTISAN BAKERY with Gold Accent Dot -->
+    <text x="1" y="49" font-family="'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="700" letter-spacing="0.32em" fill="#C23854">
+      ARTISAN BAKERY
+    </text>
+    <circle cx="122" cy="46" r="1.5" fill="url(#goldGradientMain)"/>
+  </g>
+</svg>
+
