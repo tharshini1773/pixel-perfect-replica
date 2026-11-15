@@ -58,7 +58,7 @@ export function OrderDialog({ product, onOpenChange }: Props) {
     // Automatically record order in bakery store for the admin panel
     createOrder({
       customerName: parsed.data.name?.trim() || "Store Customer",
-      customerPhone: business.phone,
+      customerPhone: business.phoneRaw,
       deliveryDate: parsed.data.date,
       cakeMessage: parsed.data.cakeMessage,
       notes: parsed.data.notes,

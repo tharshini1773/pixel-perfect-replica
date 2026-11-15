@@ -44,7 +44,7 @@ describe("Cake menu rules", () => {
 
 describe("WhatsApp ordering", () => {
   it("pre-fills the cake, quantity and total in the message", () => {
-    const cake = products[0]; // first cake
+    const cake = products[0]!; // first cake
     const msg = buildOrderMessage(cake, { quantity: 2, cakeMessage: "Happy Birthday" });
     expect(msg).toContain(cake.name);
     expect(msg).toContain(cake.weight);

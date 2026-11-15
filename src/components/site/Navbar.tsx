@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Menu, Phone, X, ShoppingBag, MessageCircle, MapPin } from "lucide-react";
+import { Menu, Phone, X, ShoppingBag, MessageCircle, MapPin, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "./Logo";
 import { navLinks } from "@/config/navigation";
@@ -80,6 +80,11 @@ export function Navbar() {
               <ShoppingBag className="h-4 w-4" /> Order Now
             </Link>
           </Button>
+          <Button asChild variant="outline" size="sm" className="gap-1.5 text-xs font-semibold border-rose/30 text-rose hover:bg-rose/10 shadow-sm">
+            <Link to="/admin">
+              <ShieldCheck className="h-3.5 w-3.5 text-rose" /> Admin
+            </Link>
+          </Button>
         </div>
 
         {/* Mobile action bar */}
@@ -130,6 +135,17 @@ export function Navbar() {
                 </Link>
               </li>
             ))}
+            <li className={cn(open && "animate-fade-up")}>
+              <Link
+                to="/admin"
+                className="flex items-center justify-between rounded-2xl px-4 py-3 font-display text-lg text-rose transition-all duration-300 hover:bg-rose/10 font-bold"
+              >
+                <span className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-rose" /> Admin Portal
+                </span>
+                <span className="text-xs font-sans font-bold uppercase tracking-wider text-rose">Sign In →</span>
+              </Link>
+            </li>
           </ul>
 
           {/* Quick contact box inside mobile menu */}

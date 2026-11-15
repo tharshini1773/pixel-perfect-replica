@@ -175,7 +175,7 @@ export function AdminAuthStage({
                 </>
               ) : (
                 <>
-                  <span>Unlock Admin Dashboard</span>
+                  <span>Sign In to Admin Dashboard</span>
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}

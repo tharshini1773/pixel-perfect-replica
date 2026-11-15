@@ -77,8 +77,11 @@ export type Product = {
   description: string;
   weight: string;
   price: number;
+  discountPrice?: number | undefined;
   image: string;
-  tag?: "Bestseller" | "New" | "Chef's Pick";
+  tag?: "Bestseller" | "New" | "Chef's Pick" | undefined;
+  isAvailable?: boolean | undefined;
+  stock?: number | undefined;
 };
 
 export const products: Product[] = [

@@ -40,7 +40,7 @@ export function ContactForm() {
       return;
     }
     setErrors({});
-    setSentName(parsed.data.name.split(" ")[0]);
+    setSentName(parsed.data.name.split(" ")[0] ?? parsed.data.name);
     toast.success("Message sent! We'll reply soon.");
   };
 

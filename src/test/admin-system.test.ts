@@ -19,7 +19,7 @@ describe("Admin Authentication & Role Verification", () => {
     const pass2 = "NewSecurePassword2026!";
     const mismatch = "DifferentPassword123!";
     expect(pass1 === pass2).toBe(true);
-    expect(pass1 === mismatch).toBe(false);
+    expect((pass1 as string) === (mismatch as string)).toBe(false);
   });
 });
 

@@ -5,7 +5,7 @@ import { products as initialProducts, categories as initialCategories, type Prod
 export interface Category {
   id: string;
   name: string;
-  blurb?: string;
+  blurb?: string | undefined;
   image: string;
 }
 
@@ -16,9 +16,9 @@ export interface StoreProduct {
   description: string;
   weight: string;
   price: number;
-  discountPrice?: number;
+  discountPrice?: number | undefined;
   image: string;
-  tag?: "Bestseller" | "New" | "Chef's Pick" | string;
+  tag?: "Bestseller" | "New" | "Chef's Pick" | string | undefined;
   isAvailable: boolean;
   stock: number;
 }
@@ -27,7 +27,7 @@ export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "del
 
 export interface OrderItem {
   id: string;
-  productId?: string;
+  productId?: string | undefined;
   productName: string;
   price: number;
   quantity: number;
@@ -37,11 +37,11 @@ export interface OrderItem {
 export interface Order {
   id: string;
   customerName: string;
-  customerEmail?: string;
+  customerEmail?: string | undefined;
   customerPhone: string;
-  deliveryDate?: string;
-  cakeMessage?: string;
-  notes?: string;
+  deliveryDate?: string | undefined;
+  cakeMessage?: string | undefined;
+  notes?: string | undefined;
   totalAmount: number;
   status: OrderStatus;
   items: OrderItem[];
@@ -52,7 +52,7 @@ export interface Order {
 export interface Customer {
   id: string;
   name: string;
-  email?: string;
+  email?: string | undefined;
   phone: string;
   totalOrders: number;
   totalSpent: number;
@@ -62,11 +62,11 @@ export interface Customer {
 export interface Offer {
   id: string;
   title: string;
-  code?: string;
+  code?: string | undefined;
   discountPercentage: number;
   bannerText: string;
-  startDate?: string;
-  endDate?: string;
+  startDate?: string | undefined;
+  endDate?: string | undefined;
   isActive: boolean;
 }
 
@@ -99,11 +99,11 @@ interface BakeryStoreContextType {
   // Order Actions
   createOrder: (orderData: {
     customerName: string;
-    customerEmail?: string;
+    customerEmail?: string | undefined;
     customerPhone: string;
-    deliveryDate?: string;
-    cakeMessage?: string;
-    notes?: string;
+    deliveryDate?: string | undefined;
+    cakeMessage?: string | undefined;
+    notes?: string | undefined;
     items: OrderItem[];
     totalAmount: number;
   }) => Promise<Order>;
@@ -613,11 +613,11 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
   // ORDER ACTIONS
   const createOrder = async (orderData: {
     customerName: string;
-    customerEmail?: string;
+    customerEmail?: string | undefined;
     customerPhone: string;
-    deliveryDate?: string;
-    cakeMessage?: string;
-    notes?: string;
+    deliveryDate?: string | undefined;
+    cakeMessage?: string | undefined;
+    notes?: string | undefined;
     items: OrderItem[];
     totalAmount: number;
   }): Promise<Order> => {
@@ -649,14 +649,16 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
     let updatedCustomers = [...customers];
     if (existingIndex >= 0) {
       const existing = updatedCustomers[existingIndex];
-      updatedCustomers[existingIndex] = {
-        ...existing,
-        name: orderData.customerName || existing.name,
-        email: orderData.customerEmail || existing.email,
-        totalOrders: existing.totalOrders + 1,
-        totalSpent: existing.totalSpent + orderData.totalAmount,
-        lastOrderAt: now,
-      };
+      if (existing) {
+        updatedCustomers[existingIndex] = {
+          ...existing,
+          name: orderData.customerName || existing.name,
+          email: orderData.customerEmail ?? existing.email,
+          totalOrders: existing.totalOrders + 1,
+          totalSpent: existing.totalSpent + orderData.totalAmount,
+          lastOrderAt: now,
+        };
+      }
     } else {
       updatedCustomers = [
         {
