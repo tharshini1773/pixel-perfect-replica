@@ -8,7 +8,7 @@ export const categories = [
     id: "birthday",
     name: "Birthday Cakes",
     blurb: "Bright, joyful celebrations with candles & sprinkles",
-    image: "https://images.unsplash.com/photo-1535141192574-5d4897c13136?auto=format&fit=crop&w=800&q=80",
+    image: "/images/cake-birthday.jpg",
   },
   {
     id: "wedding",
@@ -62,7 +62,7 @@ export const categories = [
     id: "anniversary",
     name: "Anniversary Cakes",
     blurb: "Heart shapes, vintage Lambeth piping & romantic florals",
-    image: "https://images.unsplash.com/photo-1518047601542-4505c4434222?auto=format&fit=crop&w=800&q=80",
+    image: "/images/cake-anniversary.jpg",
   },
 ] as const;
 
@@ -93,7 +93,7 @@ export const products: Product[] = [
     description: "Soft vanilla bean sponge layered with strawberry compote and festive sprinkles.",
     weight: "1 kg",
     price: 650,
-    image: "https://images.unsplash.com/photo-1535141192574-5d4897c13136?auto=format&fit=crop&w=800&q=80",
+    image: "/images/cake-birthday.jpg",
     tag: "Bestseller",
   },
   {
@@ -285,7 +285,7 @@ export const products: Product[] = [
     description: "Romantic heart-shaped cake featuring intricate Victorian ruffle piping and sugar cherries.",
     weight: "1 kg",
     price: 950,
-    image: "https://images.unsplash.com/photo-1518047601542-4505c4434222?auto=format&fit=crop&w=800&q=80",
+    image: "/images/cake-anniversary.jpg",
     tag: "Chef's Pick",
   },
   {

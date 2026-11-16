@@ -56,7 +56,7 @@ export type GalleryImage = {
 export const gallery: GalleryImage[] = [
   // 1. Birthday Cakes
   {
-    src: "https://images.unsplash.com/photo-1535141192574-5d4897c13136?auto=format&fit=crop&w=1200&q=80",
+    src: "/images/cake-birthday.jpg",
     alt: "Handcrafted confetti celebration birthday cake with macarons and fresh floral blooms",
     title: "Confetti Celebration Cake",
     category: "Birthday Cakes",
@@ -190,7 +190,7 @@ export const gallery: GalleryImage[] = [
 
   // 10. Anniversary Cakes
   {
-    src: "https://images.unsplash.com/photo-1518047601542-4505c4434222?auto=format&fit=crop&w=1200&q=80",
+    src: "/images/cake-anniversary.jpg",
     alt: "Vintage heart-shaped Lambeth piped anniversary cake with delicate ruffles",
     title: "Vintage Lambeth Heart Cake",
     category: "Anniversary Cakes",

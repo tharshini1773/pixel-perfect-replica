@@ -19,7 +19,7 @@ export function CategoriesTab() {
     setId("");
     setName("");
     setBlurb("");
-    setImage("https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=800&q=80");
+    setImage("/images/cake-birthday.jpg");
     setIsModalOpen(true);
   };
 
@@ -28,7 +28,13 @@ export function CategoriesTab() {
     setId(c.id);
     setName(c.name);
     setBlurb(c.blurb || "");
-    setImage(c.image);
+    let img = c.image;
+    if (img?.includes("photo-1535141192574") || (!img && c.id === "birthday")) {
+      img = "/images/cake-birthday.jpg";
+    } else if (img?.includes("photo-1518047601542") || (!img && c.id === "anniversary")) {
+      img = "/images/cake-anniversary.jpg";
+    }
+    setImage(img || "/images/cake-birthday.jpg");
     setIsModalOpen(true);
   };
 
@@ -84,6 +90,13 @@ export function CategoriesTab() {
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {categories.map((c) => {
           const count = products.filter((p) => p.category === c.id).length;
+          let safeImg = c.image;
+          if (safeImg?.includes("photo-1535141192574") || (!safeImg && c.id === "birthday")) {
+            safeImg = "/images/cake-birthday.jpg";
+          } else if (safeImg?.includes("photo-1518047601542") || (!safeImg && c.id === "anniversary")) {
+            safeImg = "/images/cake-anniversary.jpg";
+          }
+
           return (
             <div
               key={c.id}
@@ -91,8 +104,18 @@ export function CategoriesTab() {
             >
               <div className="relative h-36 w-full overflow-hidden bg-[#FAF7F2]">
                 <img
-                  src={c.image}
+                  src={safeImg}
                   alt={c.name}
+                  onError={(e) => {
+                    const el = e.currentTarget;
+                    if (c.id === "birthday") {
+                      el.src = "/images/cake-birthday.jpg";
+                    } else if (c.id === "anniversary") {
+                      el.src = "/images/cake-anniversary.jpg";
+                    } else {
+                      el.src = "/images/cake-wedding.jpg";
+                    }
+                  }}
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                 />
                 <span className="absolute bottom-3 left-3 rounded-full bg-white/95 px-2.5 py-1 text-[0.68rem] font-bold text-[#1A100C] shadow-sm backdrop-blur-sm">
@@ -186,9 +209,59 @@ export function CategoriesTab() {
                   type="text"
                   value={image}
                   onChange={(e) => setImage(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
+                  placeholder="/images/cake-birthday.jpg or https://..."
                   className="w-full rounded-xl border border-[#EFE4DB] p-2.5 text-xs text-[#1A100C] focus:border-rose focus:outline-none"
                 />
+
+                {/* Cover Image Preview */}
+                <div className="mt-2.5 flex items-center gap-3 p-2.5 rounded-2xl bg-[#FAF7F2] border border-[#EFE4DB]">
+                  <div className="h-12 w-12 rounded-xl overflow-hidden bg-white border border-[#EFE4DB] flex-shrink-0">
+                    <img
+                      src={image}
+                      alt="Preview"
+                      onError={(e) => {
+                        e.currentTarget.src = "/images/cake-birthday.jpg";
+                      }}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="text-[0.68rem] text-[#8C7A70] flex-1">
+                    <span className="font-bold text-[#5C4D44] block">Image Preview</span>
+                    <span>Local bakery photo or valid web image URL</span>
+                  </div>
+                </div>
+
+                {/* Preset image buttons */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setImage("/images/cake-birthday.jpg")}
+                    className="rounded-lg border border-[#EFE4DB] bg-white px-2 py-0.5 text-[0.68rem] font-medium text-[#5C4D44] hover:border-rose hover:text-rose transition-colors"
+                  >
+                    Birthday
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImage("/images/cake-anniversary.jpg")}
+                    className="rounded-lg border border-[#EFE4DB] bg-white px-2 py-0.5 text-[0.68rem] font-medium text-[#5C4D44] hover:border-rose hover:text-rose transition-colors"
+                  >
+                    Anniversary
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImage("/images/cake-wedding.jpg")}
+                    className="rounded-lg border border-[#EFE4DB] bg-white px-2 py-0.5 text-[0.68rem] font-medium text-[#5C4D44] hover:border-rose hover:text-rose transition-colors"
+                  >
+                    Wedding
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImage("/images/cake-chocolate.jpg")}
+                    className="rounded-lg border border-[#EFE4DB] bg-white px-2 py-0.5 text-[0.68rem] font-medium text-[#5C4D44] hover:border-rose hover:text-rose transition-colors"
+                  >
+                    Chocolate
+                  </button>
+                </div>
               </div>
 
               <div>

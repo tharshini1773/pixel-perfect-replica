@@ -257,7 +257,7 @@ const INITIAL_CATEGORIES: Category[] = [
     id: "birthday",
     name: "Birthday Cakes",
     blurb: "Festive celebration cakes with handcrafted candles, macarons and sprinkles.",
-    image: "https://images.unsplash.com/photo-1535141192574-5d4897c13136?auto=format&fit=crop&w=800&q=80",
+    image: "/images/cake-birthday.jpg",
   },
   {
     id: "wedding",
@@ -269,7 +269,7 @@ const INITIAL_CATEGORIES: Category[] = [
     id: "anniversary",
     name: "Anniversary Cakes",
     blurb: "Romantic heart shapes and vintage Lambeth piped designs.",
-    image: "https://images.unsplash.com/photo-1518047601542-4505c4434222?auto=format&fit=crop&w=800&q=80",
+    image: "/images/cake-anniversary.jpg",
   },
   {
     id: "chocolate",
@@ -810,14 +810,44 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
+    const healCategoryImage = (cat: Category): Category => {
+      let img = cat.image || "";
+      if (img.includes("photo-1535141192574") || (!img && cat.id === "birthday")) {
+        img = "/images/cake-birthday.jpg";
+      } else if (img.includes("photo-1518047601542") || (!img && cat.id === "anniversary")) {
+        img = "/images/cake-anniversary.jpg";
+      }
+      return { ...cat, image: img };
+    };
+
+    const healProductImage = (prod: StoreProduct): StoreProduct => {
+      let img = prod.image || "";
+      if (img.includes("photo-1535141192574") || (!img && prod.category === "birthday")) {
+        img = "/images/cake-birthday.jpg";
+      } else if (img.includes("photo-1518047601542") || (!img && prod.category === "anniversary")) {
+        img = "/images/cake-anniversary.jpg";
+      }
+      return { ...prod, image: img };
+    };
+
     async function loadData() {
       // 1. Instant load from localStorage cache
       try {
         const cProd = localStorage.getItem(KEY_PRODUCTS);
-        if (cProd) setProducts(JSON.parse(cProd));
+        if (cProd) {
+          const parsed = JSON.parse(cProd) as StoreProduct[];
+          const healed = parsed.map(healProductImage);
+          setProducts(healed);
+          localStorage.setItem(KEY_PRODUCTS, JSON.stringify(healed));
+        }
 
         const cCat = localStorage.getItem(KEY_CATEGORIES);
-        if (cCat) setCategories(JSON.parse(cCat));
+        if (cCat) {
+          const parsed = JSON.parse(cCat) as Category[];
+          const healed = parsed.map(healCategoryImage);
+          setCategories(healed);
+          localStorage.setItem(KEY_CATEGORIES, JSON.stringify(healed));
+        }
 
         const cOrd = localStorage.getItem(KEY_ORDERS);
         if (cOrd) setOrders(JSON.parse(cOrd));
@@ -857,8 +887,16 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
         if (!prodSnap.empty) {
           const fsProducts = prodSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as StoreProduct[];
           if (isMounted && fsProducts.length > 0) {
-            setProducts(fsProducts);
-            localStorage.setItem(KEY_PRODUCTS, JSON.stringify(fsProducts));
+            const healed = fsProducts.map(healProductImage);
+            setProducts(healed);
+            localStorage.setItem(KEY_PRODUCTS, JSON.stringify(healed));
+
+            for (const p of fsProducts) {
+              if (p.image && (p.image.includes("photo-1535141192574") || p.image.includes("photo-1518047601542"))) {
+                const fixed = p.category === "birthday" ? "/images/cake-birthday.jpg" : "/images/cake-anniversary.jpg";
+                updateDoc(doc(db, "products", p.id), { image: fixed }).catch(() => {});
+              }
+            }
           }
         }
 
@@ -877,8 +915,16 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
         if (!catSnap.empty) {
           const fsCategories = catSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Category[];
           if (isMounted && fsCategories.length > 0) {
-            setCategories(fsCategories);
-            localStorage.setItem(KEY_CATEGORIES, JSON.stringify(fsCategories));
+            const healed = fsCategories.map(healCategoryImage);
+            setCategories(healed);
+            localStorage.setItem(KEY_CATEGORIES, JSON.stringify(healed));
+
+            for (const c of fsCategories) {
+              if (c.image && (c.image.includes("photo-1535141192574") || c.image.includes("photo-1518047601542"))) {
+                const fixed = c.id === "birthday" ? "/images/cake-birthday.jpg" : "/images/cake-anniversary.jpg";
+                updateDoc(doc(db, "categories", c.id), { image: fixed }).catch(() => {});
+              }
+            }
           }
         }
 
