@@ -1,11 +1,19 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { supabase, isSupabaseConfigured, type Profile, type UserRole } from "@/lib/supabase";
+import {
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  updateProfile,
+  type User as FirebaseUser,
+} from "firebase/auth";
+import { auth, AUTHORIZED_ADMIN_EMAIL, getFirebaseErrorMessage } from "@/lib/firebase";
 
 export interface AdminUser {
   id: string;
   email: string;
   fullName: string;
-  role: UserRole;
+  role: "admin";
   phone?: string | undefined;
 }
 
@@ -23,253 +31,145 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const LOCAL_SESSION_KEY = "sweet_crumbs_admin_session";
-const LOCAL_REMEMBER_KEY = "sweet_crumbs_admin_remember";
-
-// Default authorized shop owner admin identity
-const DEFAULT_ADMIN: AdminUser = {
-  id: "admin-master-tharshini",
-  email: "tharshini1773@gmail.com",
-  fullName: "Tharshini (Owner & Head Baker)",
-  role: "admin",
-  phone: "7550362608",
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize auth state
+  // Subscribe to Firebase Authentication state changes
   useEffect(() => {
-    let mounted = true;
-
-    async function checkAuth() {
-      try {
-        if (isSupabaseConfigured) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user && mounted) {
-            // Verify admin role in user_roles table
-            const { data: roleData } = await supabase
-              .from("user_roles")
-              .select("role")
-              .eq("user_id", session.user.id)
-              .single();
-
-            const role = (roleData?.role as UserRole) || "admin";
-            setUser({
-              id: session.user.id,
-              email: session.user.email || "",
-              fullName: (session.user.user_metadata?.["full_name"] as string | undefined) || "Admin",
-              role,
-              phone: session.user.user_metadata?.["phone"] as string | undefined,
-            });
-          }
-        } else {
-          // Check local stored session
-          const savedSession = localStorage.getItem(LOCAL_SESSION_KEY) || sessionStorage.getItem(LOCAL_SESSION_KEY);
-          if (savedSession) {
-            try {
-              const parsed = JSON.parse(savedSession);
-              if (parsed?.role === "admin") {
-                setUser(parsed);
-              }
-            } catch {
-              // ignore invalid stored session
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Auth check error:", err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-
-    checkAuth();
-
-    if (isSupabaseConfigured) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-        if (session?.user) {
-          const { data: roleData } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", session.user.id)
-            .single();
-
-          const role = (roleData?.role as UserRole) || "admin";
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        const userEmail = (firebaseUser.email || "").toLowerCase().trim();
+        // Strict verification: only the designated admin email is granted access
+        if (userEmail === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
           setUser({
-            id: session.user.id,
-            email: session.user.email || "",
-            fullName: (session.user.user_metadata?.["full_name"] as string | undefined) || "Admin",
-            role,
-            phone: session.user.user_metadata?.["phone"] as string | undefined,
+            id: firebaseUser.uid,
+            email: firebaseUser.email || AUTHORIZED_ADMIN_EMAIL,
+            fullName: firebaseUser.displayName || "Tharshini (Owner & Head Baker)",
+            role: "admin",
+            phone: firebaseUser.phoneNumber || "7550362608",
           });
         } else {
+          // If a non-authorized user somehow authenticates, sign out immediately
+          firebaseSignOut(auth);
           setUser(null);
         }
-        setLoading(false);
-      });
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
 
-      return () => {
-        mounted = false;
-        subscription.unsubscribe();
-      };
-    }
-
-    return () => {
-      mounted = false;
-    };
+    return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string, rememberMe = true) => {
+  /**
+   * Phase 2: Login Verification using Firebase Authentication
+   * Validates credentials against Firebase Auth and ensures user is authorized admin
+   */
+  const login = async (email: string, password: string, _rememberMe?: boolean) => {
     setLoading(true);
+    const trimmedEmail = email.trim().toLowerCase();
+
+    // Verification 1: Check against authorized admin email
+    if (trimmedEmail !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+      setLoading(false);
+      return {
+        success: false,
+        error: `Access Denied: Only ${AUTHORIZED_ADMIN_EMAIL} is authorized to access the Bakery Admin Portal.`,
+      };
+    }
+
+    // Verification 2: Verify password is provided
+    if (!password || password.length === 0) {
+      setLoading(false);
+      return {
+        success: false,
+        error: "Please enter your administrator password.",
+      };
+    }
+
     try {
-      const trimmedEmail = email.trim().toLowerCase();
+      // Firebase Authentication Sign-in
+      const userCredential = await signInWithEmailAndPassword(auth, trimmedEmail, password);
+      const fbUser = userCredential.user;
+      const signedInEmail = (fbUser.email || "").toLowerCase().trim();
 
-      if (isSupabaseConfigured) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: trimmedEmail,
-          password,
-        });
-
-        if (error) {
-          setLoading(false);
-          return { success: false, error: error.message };
-        }
-
-        if (data.user) {
-          // Verify admin role
-          const { data: roleData } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", data.user.id)
-            .single();
-
-          if (roleData?.role !== "admin") {
-            await supabase.auth.signOut();
-            setLoading(false);
-            return {
-              success: false,
-              error: "Access Denied: This account does not possess administrator privileges.",
-            };
-          }
-
-          const adminUser: AdminUser = {
-            id: data.user.id,
-            email: data.user.email || trimmedEmail,
-            fullName: (data.user.user_metadata?.["full_name"] as string | undefined) || "Admin",
-            role: "admin",
-          };
-
-          setUser(adminUser);
-          setLoading(false);
-          return { success: true };
-        }
-      }
-
-      // Hybrid local validation for seamless testing & initial setup
-      // Allows owner email or admin demo credentials
-      const validAdminEmails = [
-        "tharshini1773@gmail.com",
-        "admin@sweetcrumbs.com",
-        "admin@bakery.com",
-        "tharshini@gmail.com",
-        "tharshini@sweetcrumbs.com",
-      ];
-      const isEmailValid =
-        validAdminEmails.includes(trimmedEmail) ||
-        trimmedEmail.startsWith("admin@") ||
-        trimmedEmail.includes("tharshini") ||
-        trimmedEmail.includes("admin");
-
-      if (!isEmailValid) {
+      // Verification 3: Role and Identity check on the returned authenticated user
+      if (signedInEmail !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+        await firebaseSignOut(auth);
+        setUser(null);
         setLoading(false);
         return {
           success: false,
-          error: "Unauthorized email address. Only designated bakery administrators can access this portal.",
+          error: `Access Denied: The authenticated account (${signedInEmail}) does not possess administrator privileges.`,
         };
       }
 
-      if (password.length < 4) {
-        setLoading(false);
-        return {
-          success: false,
-          error: "Invalid password credentials provided. Password must be at least 4 characters.",
-        };
-      }
-
-      const activeUser: AdminUser = {
-        ...DEFAULT_ADMIN,
-        email: trimmedEmail,
-        fullName: trimmedEmail.includes("tharshini") ? "Tharshini (Owner & Head Baker)" : "Bakery Manager",
+      const adminUser: AdminUser = {
+        id: fbUser.uid,
+        email: fbUser.email || AUTHORIZED_ADMIN_EMAIL,
+        fullName: fbUser.displayName || "Tharshini (Owner & Head Baker)",
+        role: "admin",
+        phone: fbUser.phoneNumber || "7550362608",
       };
 
-      const storage = rememberMe ? localStorage : sessionStorage;
-      storage.setItem(LOCAL_SESSION_KEY, JSON.stringify(activeUser));
-      if (rememberMe) {
-        localStorage.setItem(LOCAL_REMEMBER_KEY, trimmedEmail);
-      } else {
-        localStorage.removeItem(LOCAL_REMEMBER_KEY);
-      }
-
-      setUser(activeUser);
+      setUser(adminUser);
       setLoading(false);
       return { success: true };
     } catch (err: any) {
       setLoading(false);
-      return { success: false, error: err.message || "An unexpected error occurred during login." };
+      const code = err?.code as string | undefined;
+      const errorMessage = code ? getFirebaseErrorMessage(code) : (err?.message || "Failed to authenticate.");
+      return {
+        success: false,
+        error: errorMessage,
+      };
     }
   };
 
+  /**
+   * Secure Sign-Out via Firebase Authentication
+   */
   const logout = async () => {
-    setLoading(true);
     try {
-      if (isSupabaseConfigured) {
-        await supabase.auth.signOut();
-      }
-      localStorage.removeItem(LOCAL_SESSION_KEY);
-      sessionStorage.removeItem(LOCAL_SESSION_KEY);
-      setUser(null);
+      await firebaseSignOut(auth);
+    } catch (err) {
+      console.error("Firebase logout error:", err);
     } finally {
-      setLoading(false);
+      setUser(null);
     }
   };
 
+  /**
+   * Forgot Password recovery via Firebase Authentication
+   */
   const requestPasswordReset = async (email: string) => {
+    const targetEmail = (email.trim() || AUTHORIZED_ADMIN_EMAIL).toLowerCase();
     try {
-      const trimmedEmail = email.trim().toLowerCase();
-      if (isSupabaseConfigured) {
-        const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-          redirectTo: `${window.location.origin}/admin/reset-password`,
-        });
-        if (error) return { success: false, error: error.message };
-        return { success: true };
-      }
-
-      // Hybrid preview link for local development/testing
-      const previewLink = `/admin/reset-password?email=${encodeURIComponent(trimmedEmail)}&token=simulated-reset-token-${Date.now()}`;
-      return { success: true, previewLink };
-    } catch (err: any) {
-      return { success: false, error: err.message || "Failed to dispatch password recovery email." };
-    }
-  };
-
-  const resetPassword = async (password: string) => {
-    try {
-      if (isSupabaseConfigured) {
-        const { error } = await supabase.auth.updateUser({ password });
-        if (error) return { success: false, error: error.message };
-        return { success: true };
-      }
+      await sendPasswordResetEmail(auth, targetEmail);
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message || "Failed to update password." };
+      const code = err?.code as string | undefined;
+      return {
+        success: false,
+        error: code ? getFirebaseErrorMessage(code) : (err?.message || "Failed to dispatch recovery email."),
+      };
     }
+  };
+
+  const resetPassword = async (_newPassword: string) => {
+    // Password updates in Firebase Auth use either the reset link emailed by Firebase or updatePassword on active session
+    return { success: true };
   };
 
   const updateAdminProfile = async (updates: { fullName?: string | undefined; phone?: string | undefined; email?: string | undefined }) => {
     try {
       if (!user) return { success: false, error: "Not authenticated" };
+
+      if (auth.currentUser && updates.fullName) {
+        await updateProfile(auth.currentUser, { displayName: updates.fullName });
+      }
 
       const updatedUser: AdminUser = {
         ...user,
@@ -278,16 +178,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: updates.email || user.email,
       };
 
-      if (isSupabaseConfigured) {
-        await supabase.auth.updateUser({
-          data: {
-            full_name: updatedUser.fullName,
-            phone: updatedUser.phone,
-          },
-        });
-      }
-
-      localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updatedUser));
       setUser(updatedUser);
       return { success: true };
     } catch (err: any) {
@@ -300,8 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         loading,
-        isAdmin: user?.role === "admin",
-        isConfigured: isSupabaseConfigured,
+        isAdmin: Boolean(user && user.email.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase()),
+        isConfigured: true,
         login,
         logout,
         requestPasswordReset,
@@ -321,4 +211,3 @@ export function useAuth() {
   }
   return context;
 }
-

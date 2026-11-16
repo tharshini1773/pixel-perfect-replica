@@ -81,7 +81,7 @@ export function Navbar() {
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm" className="gap-1.5 text-xs font-semibold border-rose/30 text-rose hover:bg-rose/10 shadow-sm">
-            <Link to="/admin">
+            <Link to="/admin/login">
               <ShieldCheck className="h-3.5 w-3.5 text-rose" /> Admin
             </Link>
           </Button>
@@ -137,7 +137,7 @@ export function Navbar() {
             ))}
             <li className={cn(open && "animate-fade-up")}>
               <Link
-                to="/admin"
+                to="/admin/login"
                 className="flex items-center justify-between rounded-2xl px-4 py-3 font-display text-lg text-rose transition-all duration-300 hover:bg-rose/10 font-bold"
               >
                 <span className="flex items-center gap-2">

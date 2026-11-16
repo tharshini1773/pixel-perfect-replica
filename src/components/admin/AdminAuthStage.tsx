@@ -1,6 +1,16 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
-import { Eye, EyeOff, Lock, Mail, ShieldAlert, Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  ShieldAlert,
+  Sparkles,
+  ArrowRight,
+  ShieldCheck,
+  CheckCircle2,
+} from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/site/Logo";
 import { Button } from "@/components/ui/button";
@@ -13,34 +23,38 @@ interface AdminAuthStageProps {
 
 export function AdminAuthStage({
   onSuccess,
-  title = "Admin Authentication",
-  subtitle = "Please enter your administrator login and password to access the bakery management dashboard.",
+  title = "Admin Login",
+  subtitle = "Sign in with your Firebase administrator credentials to access the bakery management dashboard.",
 }: AdminAuthStageProps) {
-  const { login } = useAuth();
+  const { login, requestPasswordReset } = useAuth();
 
   const [email, setEmail] = useState("tharshini1773@gmail.com");
-  const [password, setPassword] = useState("BakeryAdmin2026!");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [sendingReset, setSendingReset] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    setResetMessage(null);
 
-    if (!email.trim() || !email.includes("@")) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !trimmedEmail.includes("@")) {
       setError("Please provide a valid administrative email address.");
       return;
     }
 
-    if (!password || password.length < 6) {
-      setError("Password must contain at least 6 characters.");
+    if (!password) {
+      setError("Please enter your administrator password.");
       return;
     }
 
     setLoading(true);
-    const result = await login(email, password, rememberMe);
+    const result = await login(trimmedEmail, password, rememberMe);
     setLoading(false);
 
     if (result.success) {
@@ -48,7 +62,23 @@ export function AdminAuthStage({
         onSuccess();
       }
     } else {
-      setError(result.error || "Failed to authenticate. Please check your credentials.");
+      setError(result.error || "Authentication failed. Please check your credentials.");
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setError(null);
+    setResetMessage(null);
+    const targetEmail = email.trim() || "tharshini1773@gmail.com";
+
+    setSendingReset(true);
+    const res = await requestPasswordReset(targetEmail);
+    setSendingReset(false);
+
+    if (res.success) {
+      setResetMessage(`Password recovery link dispatched to ${targetEmail}. Please check your inbox.`);
+    } else {
+      setError(res.error || "Unable to send password recovery email. Please check Firebase configuration.");
     }
   };
 
@@ -67,7 +97,7 @@ export function AdminAuthStage({
             </Link>
             <div className="inline-flex items-center gap-1.5 rounded-full bg-rose/10 px-3 py-1 text-xs font-bold text-rose">
               <ShieldCheck className="h-3.5 w-3.5" />
-              <span>Authentication Stage</span>
+              <span>Firebase Authentication</span>
             </div>
             <h1 className="mt-4 font-display text-2xl font-bold tracking-tight text-[#1A100C] sm:text-3xl">
               {title}
@@ -77,11 +107,22 @@ export function AdminAuthStage({
             </p>
           </div>
 
+          {/* Success / Recovery Message */}
+          {resetMessage && (
+            <div className="mt-6 flex items-start gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-50 p-4 text-xs font-medium text-emerald-800">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
+              <p>{resetMessage}</p>
+            </div>
+          )}
+
           {/* Error Alert */}
           {error && (
             <div className="mt-6 flex items-start gap-3 rounded-2xl border border-rose/30 bg-rose/10 p-4 text-xs font-medium text-[#8F1D35]">
               <ShieldAlert className="h-4 w-4 shrink-0 text-rose mt-0.5" />
-              <p>{error}</p>
+              <div className="space-y-1">
+                <p className="font-bold">Authentication Error</p>
+                <p>{error}</p>
+              </div>
             </div>
           )}
 
@@ -102,7 +143,7 @@ export function AdminAuthStage({
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@sweetcrumbs.com"
+                  placeholder="tharshini1773@gmail.com"
                   className="w-full rounded-xl border border-[#EFE4DB] bg-[#FAF7F2] pl-10 pr-4 py-3 text-sm text-[#1A100C] placeholder:text-[#A8988E] transition-all focus:border-rose focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose/20"
                 />
                 <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-[#8C7A70]" />
@@ -118,12 +159,14 @@ export function AdminAuthStage({
                 >
                   Password
                 </label>
-                <Link
-                  to="/admin/forgot-password"
-                  className="text-xs font-semibold text-rose hover:text-rose-dark transition-colors"
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={sendingReset}
+                  className="text-xs font-semibold text-rose hover:text-rose-dark transition-colors disabled:opacity-50"
                 >
-                  Forgot Password?
-                </Link>
+                  {sendingReset ? "Sending reset email…" : "Forgot Password?"}
+                </button>
               </div>
               <div className="relative">
                 <input
@@ -132,7 +175,7 @@ export function AdminAuthStage({
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
+                  placeholder="Enter your administrator password"
                   className="w-full rounded-xl border border-[#EFE4DB] bg-[#FAF7F2] pl-10 pr-11 py-3 text-sm text-[#1A100C] placeholder:text-[#A8988E] transition-all focus:border-rose focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose/20"
                 />
                 <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-[#8C7A70]" />
@@ -171,27 +214,27 @@ export function AdminAuthStage({
               {loading ? (
                 <>
                   <Sparkles className="h-4 w-4 animate-spin" />
-                  <span>Verifying Credentials…</span>
+                  <span>Verifying Credentials with Firebase…</span>
                 </>
               ) : (
                 <>
-                  <span>Sign In to Admin Dashboard</span>
+                  <span>Login to Admin Portal</span>
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}
             </Button>
           </form>
 
-          {/* Quick Demo Helper Pill */}
+          {/* Secure Admin Note */}
           <div className="mt-8 rounded-2xl border border-dashed border-[#EFE4DB] bg-[#FAF7F2] p-4 text-center">
             <p className="text-[0.7rem] font-bold uppercase tracking-wider text-[#8C7A70]">
-              Authorized Demo Credentials
+              Authorized Bakery Admin Email
             </p>
             <p className="mt-1 text-xs text-[#5C4D44]">
-              <strong>Email:</strong> <code className="text-rose font-mono">tharshini1773@gmail.com</code>
+              <code className="text-rose font-mono font-bold">tharshini1773@gmail.com</code>
             </p>
-            <p className="mt-0.5 text-xs text-[#5C4D44]">
-              <strong>Password:</strong> <code className="text-rose font-mono">BakeryAdmin2026!</code>
+            <p className="mt-1 text-[0.72rem] text-[#8C7A70]">
+              Protected via Firebase Authentication. Public registration is disabled.
             </p>
           </div>
 

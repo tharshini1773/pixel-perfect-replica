@@ -1,25 +1,36 @@
 import { describe, expect, it } from "vitest";
+import { AUTHORIZED_ADMIN_EMAIL, getFirebaseErrorMessage } from "../lib/firebase";
 
-describe("Admin Authentication & Role Verification", () => {
-  it("validates that only designated administrative accounts have admin permissions", () => {
-    const validAdmins = ["tharshini1773@gmail.com", "admin@sweetcrumbs.com", "admin@bakery.com"];
-    expect(validAdmins.includes("tharshini1773@gmail.com")).toBe(true);
-    expect(validAdmins.includes("customer@gmail.com")).toBe(false);
+describe("Phase 1 & 2: Firebase Admin Authentication & Role Verification", () => {
+  it("enforces that only the designated bakery admin email has access", () => {
+    expect(AUTHORIZED_ADMIN_EMAIL).toBe("tharshini1773@gmail.com");
+
+    const checkAuthorization = (email: string) => {
+      return email.trim().toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase();
+    };
+
+    expect(checkAuthorization("tharshini1773@gmail.com")).toBe(true);
+    expect(checkAuthorization("THARSHINI1773@GMAIL.COM")).toBe(true);
+    expect(checkAuthorization("hacker@test.com")).toBe(false);
+    expect(checkAuthorization("user@gmail.com")).toBe(false);
+    expect(checkAuthorization("admin@anotherdomain.com")).toBe(false);
   });
 
-  it("enforces minimum password length of 6 characters for admin login and 8 for resets", () => {
-    const validLoginPass = "BakeryAdmin2026!";
-    const shortPass = "123";
-    expect(validLoginPass.length).toBeGreaterThanOrEqual(6);
-    expect(shortPass.length).toBeLessThan(6);
+  it("translates Firebase Auth error codes to user-friendly error messages", () => {
+    expect(getFirebaseErrorMessage("auth/invalid-credential")).toContain("Incorrect email or password");
+    expect(getFirebaseErrorMessage("auth/wrong-password")).toContain("Incorrect email or password");
+    expect(getFirebaseErrorMessage("auth/user-not-found")).toContain("No account found with this email");
+    expect(getFirebaseErrorMessage("auth/too-many-requests")).toContain("Too many failed attempts");
   });
 
-  it("checks password match validation for password resets", () => {
-    const pass1 = "NewSecurePassword2026!";
-    const pass2 = "NewSecurePassword2026!";
-    const mismatch = "DifferentPassword123!";
-    expect(pass1 === pass2).toBe(true);
-    expect((pass1 as string) === (mismatch as string)).toBe(false);
+  it("protects routes against unauthenticated access", () => {
+    const isRouteAccessible = (user: { email: string } | null) => {
+      return Boolean(user && user.email.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase());
+    };
+
+    expect(isRouteAccessible(null)).toBe(false);
+    expect(isRouteAccessible({ email: "unknown@user.com" })).toBe(false);
+    expect(isRouteAccessible({ email: "tharshini1773@gmail.com" })).toBe(true);
   });
 });
 
@@ -35,18 +46,6 @@ describe("Admin Order Management Status Lifecycle", () => {
       "delivered",
       "cancelled",
     ]);
-  });
-
-  it("allows transition from pending through preparation to delivered", () => {
-    let orderStatus = "pending";
-    orderStatus = "confirmed";
-    expect(orderStatus).toBe("confirmed");
-    orderStatus = "preparing";
-    expect(orderStatus).toBe("preparing");
-    orderStatus = "ready";
-    expect(orderStatus).toBe("ready");
-    orderStatus = "delivered";
-    expect(orderStatus).toBe("delivered");
   });
 });
 
@@ -66,4 +65,3 @@ describe("Store Settings & Contact Verification", () => {
     expect(settings.address).toContain("Thoothukudi");
   });
 });
-

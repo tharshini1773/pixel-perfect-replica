@@ -20,15 +20,15 @@ function AdminLoginPage() {
 
   useEffect(() => {
     if (!loading && user && isAdmin) {
-      navigate({ to: "/admin" });
+      navigate({ to: "/admin/dashboard" });
     }
   }, [user, isAdmin, loading, navigate]);
 
   return (
     <AdminAuthStage
-      onSuccess={() => navigate({ to: "/admin" })}
-      title="Admin Portal Login"
-      subtitle="Sign in with your administrator credentials to proceed to the management dashboard."
+      onSuccess={() => navigate({ to: "/admin/dashboard" })}
+      title="Admin Login"
+      subtitle="Sign in with your Firebase administrator credentials to proceed to the management dashboard."
     />
   );
 }

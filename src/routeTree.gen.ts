@@ -21,6 +21,7 @@ import { Route as ReviewsRouteImport } from './routes/reviews'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminCategoriesRouteImport } from './routes/admin/categories'
 import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
+import { Route as AdminDashboardRouteImport } from './routes/admin/dashboard'
 import { Route as AdminForgotPasswordRouteImport } from './routes/admin/forgot-password'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminOffersRouteImport } from './routes/admin/offers'
@@ -89,6 +90,11 @@ const AdminCustomersRoute = AdminCustomersRouteImport.update({
   path: '/admin/customers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminDashboardRoute = AdminDashboardRouteImport.update({
+  id: '/admin/dashboard',
+  path: '/admin/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminForgotPasswordRoute = AdminForgotPasswordRouteImport.update({
   id: '/admin/forgot-password',
   path: '/admin/forgot-password',
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/reviews': typeof ReviewsRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/customers': typeof AdminCustomersRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/forgot-password': typeof AdminForgotPasswordRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/offers': typeof AdminOffersRoute
@@ -158,6 +165,7 @@ export interface FileRoutesByTo {
   '/reviews': typeof ReviewsRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/customers': typeof AdminCustomersRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/forgot-password': typeof AdminForgotPasswordRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/offers': typeof AdminOffersRoute
@@ -180,6 +188,7 @@ export interface FileRoutesById {
   '/reviews': typeof ReviewsRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/customers': typeof AdminCustomersRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/forgot-password': typeof AdminForgotPasswordRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/offers': typeof AdminOffersRoute
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
     | '/reviews'
     | '/admin/categories'
     | '/admin/customers'
+    | '/admin/dashboard'
     | '/admin/forgot-password'
     | '/admin/login'
     | '/admin/offers'
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
     | '/reviews'
     | '/admin/categories'
     | '/admin/customers'
+    | '/admin/dashboard'
     | '/admin/forgot-password'
     | '/admin/login'
     | '/admin/offers'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/reviews'
     | '/admin/categories'
     | '/admin/customers'
+    | '/admin/dashboard'
     | '/admin/forgot-password'
     | '/admin/login'
     | '/admin/offers'
@@ -267,6 +279,7 @@ export interface RootRouteChildren {
   ReviewsRoute: typeof ReviewsRoute
   AdminCategoriesRoute: typeof AdminCategoriesRoute
   AdminCustomersRoute: typeof AdminCustomersRoute
+  AdminDashboardRoute: typeof AdminDashboardRoute
   AdminForgotPasswordRoute: typeof AdminForgotPasswordRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminOffersRoute: typeof AdminOffersRoute
@@ -363,6 +376,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCustomersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/dashboard': {
+      id: '/admin/dashboard'
+      path: '/admin/dashboard'
+      fullPath: '/admin/dashboard'
+      preLoaderRoute: typeof AdminDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/forgot-password': {
       id: '/admin/forgot-password'
       path: '/admin/forgot-password'
@@ -427,6 +447,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReviewsRoute: ReviewsRoute,
   AdminCategoriesRoute: AdminCategoriesRoute,
   AdminCustomersRoute: AdminCustomersRoute,
+  AdminDashboardRoute: AdminDashboardRoute,
   AdminForgotPasswordRoute: AdminForgotPasswordRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminOffersRoute: AdminOffersRoute,
