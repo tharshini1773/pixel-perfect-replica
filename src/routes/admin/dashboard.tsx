@@ -84,6 +84,7 @@ function AdminDashboardPage() {
   const { tab: initialTab } = Route.useSearch();
 
   const [activeTab, setActiveTab] = useState<TabKey>((initialTab as TabKey) || "dashboard");
+  const [orderFilterStatus, setOrderFilterStatus] = useState<string>("all");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Sync tab with URL search parameter
@@ -93,10 +94,13 @@ function AdminDashboardPage() {
     }
   }, [initialTab]);
 
-  const switchTab = (tab: string) => {
+  const switchTab = (tab: string, options?: { filterStatus?: string }) => {
     setActiveTab(tab as TabKey);
+    if (options?.filterStatus) {
+      setOrderFilterStatus(options.filterStatus);
+    }
     setMobileMenuOpen(false);
-    navigate({ search: { tab } as any });
+    navigate({ search: { tab, ...(options?.filterStatus ? { status: options.filterStatus } : {}) } as any });
   };
 
   // Route Protection: Redirect unauthorized visitors to /admin/login
@@ -343,7 +347,7 @@ function AdminDashboardPage() {
         {/* Active Tab View Body */}
         <main className="flex-1 p-4 sm:p-8 max-w-7xl mx-auto w-full">
           {activeTab === "dashboard" && <DashboardOverviewTab onNavigateTab={switchTab} />}
-          {activeTab === "orders" && <OrdersTab />}
+          {activeTab === "orders" && <OrdersTab initialStatus={orderFilterStatus} />}
           {activeTab === "products" && <ProductsTab />}
           {activeTab === "categories" && <CategoriesTab />}
           {activeTab === "customers" && <CustomersTab />}

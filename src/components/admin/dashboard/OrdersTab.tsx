@@ -18,11 +18,18 @@ import { formatINR } from "@/config/products";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-export function OrdersTab() {
+export function OrdersTab({ initialStatus = "all" }: { initialStatus?: string }) {
   const { orders, updateOrderStatus, updateOrderPaymentStatus, deleteOrder } = useBakeryStore();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  // Sync if initial status changes from navigation
+  useState(() => {
+    if (initialStatus && initialStatus !== "all") {
+      setStatusFilter(initialStatus);
+    }
+  });
 
   const statuses: { value: OrderStatus | "all"; label: string }[] = [
     { value: "all", label: "All Orders" },
@@ -160,15 +167,21 @@ export function OrdersTab() {
               ) : (
                 filteredOrders.map((ord) => (
                   <tr key={ord.id} className="hover:bg-[#FAF7F2]/60 transition-colors">
-                    <td className="py-4 font-mono font-bold text-rose">
+                    <td
+                      onClick={() => setSelectedOrder(ord)}
+                      className="py-4 font-mono font-bold text-rose cursor-pointer hover:underline"
+                    >
                       {ord.id}
                       <p className="text-[0.68rem] text-[#8C7A70] font-normal">
                         {new Date(ord.createdAt).toLocaleDateString()}
                       </p>
                     </td>
 
-                    <td className="py-4">
-                      <p className="font-bold text-[#1A100C]">{ord.customerName}</p>
+                    <td
+                      onClick={() => setSelectedOrder(ord)}
+                      className="py-4 cursor-pointer"
+                    >
+                      <p className="font-bold text-[#1A100C] hover:text-rose transition-colors">{ord.customerName}</p>
                       <p className="text-[0.72rem] text-[#8C7A70] flex items-center gap-1">
                         <Phone className="h-3 w-3" /> {ord.customerPhone}
                       </p>

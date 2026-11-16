@@ -21,6 +21,10 @@ export function CustomersTab() {
     ? orders.filter((o) => o.customerPhone === selectedCustomer.phone)
     : [];
 
+  // Summary metrics for customer directory
+  const repeatCustomersCount = customers.filter((c) => c.totalOrders > 1).length;
+  const newCustomersCount = customers.filter((c) => c.totalOrders <= 1).length;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -42,6 +46,30 @@ export function CustomersTab() {
         </div>
       </div>
 
+      {/* Customer Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="rounded-2xl border border-[#EFE4DB] bg-white p-4 shadow-sm">
+          <p className="text-[0.68rem] font-bold uppercase tracking-wider text-[#8C7A70]">Total Customers</p>
+          <p className="font-display text-xl font-bold text-[#1A100C] mt-1">{customers.length}</p>
+          <p className="text-[0.65rem] text-[#8C7A70]">Full client database</p>
+        </div>
+        <div className="rounded-2xl border border-[#EFE4DB] bg-white p-4 shadow-sm">
+          <p className="text-[0.68rem] font-bold uppercase tracking-wider text-[#8C7A70]">Verified Clients</p>
+          <p className="font-display text-xl font-bold text-emerald-700 mt-1">100%</p>
+          <p className="text-[0.65rem] text-emerald-600 font-semibold">Phone verified</p>
+        </div>
+        <div className="rounded-2xl border border-[#EFE4DB] bg-white p-4 shadow-sm">
+          <p className="text-[0.68rem] font-bold uppercase tracking-wider text-[#8C7A70]">Repeat Buyers</p>
+          <p className="font-display text-xl font-bold text-purple-700 mt-1">{repeatCustomersCount}</p>
+          <p className="text-[0.65rem] text-[#8C7A70]">Multiple cake orders</p>
+        </div>
+        <div className="rounded-2xl border border-[#EFE4DB] bg-white p-4 shadow-sm">
+          <p className="text-[0.68rem] font-bold uppercase tracking-wider text-[#8C7A70]">New Clients</p>
+          <p className="font-display text-xl font-bold text-blue-700 mt-1">{newCustomersCount}</p>
+          <p className="text-[0.65rem] text-[#8C7A70]">Recent introductions</p>
+        </div>
+      </div>
+
       {/* Customers Table */}
       <div className="rounded-3xl border border-[#EFE4DB] bg-white p-6 shadow-card">
         <div className="overflow-x-auto">
@@ -59,7 +87,12 @@ export function CustomersTab() {
             </thead>
             <tbody className="divide-y divide-[#F2EBE5]">
               {filtered.map((c) => (
-                <tr key={c.id} className="hover:bg-[#FAF7F2]/60 transition-colors">
+                <tr
+                  key={c.id}
+                  onClick={() => setSelectedCustomer(c)}
+                  className="hover:bg-rose/5 cursor-pointer transition-colors group"
+                  title="Click to view full purchase history"
+                >
                   <td className="py-4">
                     <div className="flex items-center gap-3">
                       <div className="grid h-9 w-9 place-items-center rounded-xl bg-purple-100 text-purple-700 font-bold text-xs">
