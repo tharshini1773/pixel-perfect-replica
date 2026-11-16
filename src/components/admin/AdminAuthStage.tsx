@@ -209,7 +209,7 @@ export function AdminAuthStage({
               disabled={loading}
               size="lg"
               variant="rose"
-              className="w-full font-bold shadow-soft shadow-rose/20 mt-2"
+              className="w-full font-bold shadow-soft shadow-rose/20 mt-2 bg-none bg-[#C23854] hover:bg-[#B32E4A] active:bg-[#D96B84] active:opacity-85 text-white transition-all"
             >
               {loading ? (
                 <>
