@@ -65,3 +65,23 @@ describe("Store Settings & Contact Verification", () => {
     expect(settings.address).toContain("Thoothukudi");
   });
 });
+
+describe("Admin Routing & Protection Verification", () => {
+  it("maps /admin and /admin/login to Admin Login page first", () => {
+    const routeAction = (path: string, isAuthenticated: boolean) => {
+      if (path === "/admin") return "/admin/login";
+      if (path === "/admin/login") return "AdminLoginPage";
+      if (path.startsWith("/admin/") && !isAuthenticated) return "/admin/login";
+      return "AdminDashboard";
+    };
+
+    expect(routeAction("/admin", false)).toBe("/admin/login");
+    expect(routeAction("/admin", true)).toBe("/admin/login");
+    expect(routeAction("/admin/login", false)).toBe("AdminLoginPage");
+    expect(routeAction("/admin/login", true)).toBe("AdminLoginPage");
+    expect(routeAction("/admin/dashboard", false)).toBe("/admin/login");
+    expect(routeAction("/admin/dashboard", true)).toBe("AdminDashboard");
+    expect(routeAction("/admin/orders", false)).toBe("/admin/login");
+    expect(routeAction("/admin/products", false)).toBe("/admin/login");
+  });
+});

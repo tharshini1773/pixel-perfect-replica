@@ -31,6 +31,14 @@ interface AdminLayoutProps {
   action?: ReactNode;
 }
 
+interface AdminNavItem {
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  exact?: boolean | undefined;
+  badge?: number | undefined;
+}
+
 export function AdminLayout({ children, title, subtitle, action }: AdminLayoutProps) {
   const { user, isAdmin, loading, logout } = useAuth();
   const { orders } = useBakeryStore();
@@ -40,8 +48,8 @@ export function AdminLayout({ children, title, subtitle, action }: AdminLayoutPr
 
   const pendingOrdersCount = orders.filter((o) => o.status === "pending").length;
 
-  const navItems = [
-    { to: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  const navItems: AdminNavItem[] = [
+    { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
     { to: "/admin/products", label: "Products", icon: Cake },
     {
       to: "/admin/orders",
@@ -55,8 +63,15 @@ export function AdminLayout({ children, title, subtitle, action }: AdminLayoutPr
     { to: "/admin/settings", label: "Settings", icon: Settings },
   ];
 
+  useEffect(() => {
+    if (!loading && (!user || !isAdmin)) {
+      navigate({ to: "/admin/login" });
+    }
+  }, [user, isAdmin, loading, navigate]);
+
   const handleLogout = async () => {
     await logout();
+    navigate({ to: "/admin/login" });
   };
 
   if (loading) {
@@ -80,10 +95,9 @@ export function AdminLayout({ children, title, subtitle, action }: AdminLayoutPr
 
   if (!user || !isAdmin) {
     return (
-      <AdminAuthStage
-        title="Admin Authentication"
-        subtitle="Please enter your administrator login and password to access the bakery management dashboard."
-      />
+      <div className="flex min-h-screen items-center justify-center bg-[#FAF7F2]">
+        <p className="text-xs font-semibold text-rose">Redirecting to administrator login…</p>
+      </div>
     );
   }
 
@@ -93,7 +107,7 @@ export function AdminLayout({ children, title, subtitle, action }: AdminLayoutPr
       <aside className="hidden w-72 flex-col border-r border-[#EFE4DB] bg-white shadow-sm lg:flex">
         {/* Brand Lockup */}
         <div className="flex h-20 items-center justify-between border-b border-[#EFE4DB] px-6">
-          <Link to="/admin" className="flex items-center gap-3">
+          <Link to="/admin/dashboard" className="flex items-center gap-3">
             <Logo />
           </Link>
         </div>

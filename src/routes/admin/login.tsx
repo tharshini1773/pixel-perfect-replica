@@ -1,6 +1,4 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { useAuth } from "@/context/AuthContext";
 import { AdminAuthStage } from "@/components/admin/AdminAuthStage";
 import { pageMeta } from "@/lib/seo";
 
@@ -15,14 +13,7 @@ export const Route = createFileRoute("/admin/login")({
 });
 
 function AdminLoginPage() {
-  const { user, isAdmin, loading } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!loading && user && isAdmin) {
-      navigate({ to: "/admin/dashboard" });
-    }
-  }, [user, isAdmin, loading, navigate]);
 
   return (
     <AdminAuthStage
