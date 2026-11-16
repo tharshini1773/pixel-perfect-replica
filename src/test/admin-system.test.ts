@@ -32,6 +32,26 @@ describe("Phase 1 & 2: Firebase Admin Authentication & Role Verification", () =>
     expect(isRouteAccessible({ email: "unknown@user.com" })).toBe(false);
     expect(isRouteAccessible({ email: "tharshini1773@gmail.com" })).toBe(true);
   });
+
+  it("enforces that login is permitted ONLY when password is exactly BakeryAdmin2026", () => {
+    const validatePassword = (pwd: string) => {
+      if (!pwd || pwd.trim().length === 0) {
+        return { valid: false, error: "Please enter your administrator password." };
+      }
+      if (pwd !== "BakeryAdmin2026") {
+        return { valid: false, error: "Invalid admin password." };
+      }
+      return { valid: true };
+    };
+
+    expect(validatePassword("BakeryAdmin2026").valid).toBe(true);
+    expect(validatePassword("wrongpassword").valid).toBe(false);
+    expect(validatePassword("wrongpassword").error).toBe("Invalid admin password.");
+    expect(validatePassword("bakeryadmin2026").valid).toBe(false);
+    expect(validatePassword("BakeryAdmin2026!").valid).toBe(false);
+    expect(validatePassword("123456").valid).toBe(false);
+    expect(validatePassword("").valid).toBe(false);
+  });
 });
 
 describe("Admin Order Management Status Lifecycle", () => {

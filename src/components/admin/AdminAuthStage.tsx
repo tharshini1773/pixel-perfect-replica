@@ -53,6 +53,11 @@ export function AdminAuthStage({
       return;
     }
 
+    if (password !== "BakeryAdmin2026") {
+      setError("Invalid admin password.");
+      return;
+    }
+
     setLoading(true);
     const result = await login(trimmedEmail, password, rememberMe);
     setLoading(false);

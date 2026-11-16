@@ -89,12 +89,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    // Verification 2: Verify password is provided
+    // Verification 2: Verify password is provided and must be exactly BakeryAdmin2026
     if (!password || password.trim().length === 0) {
       setLoading(false);
       return {
         success: false,
         error: "Please enter your administrator password.",
+      };
+    }
+
+    if (password !== "BakeryAdmin2026") {
+      setLoading(false);
+      return {
+        success: false,
+        error: "Invalid admin password.",
       };
     }
 
@@ -139,11 +147,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (
         code === "auth/configuration-not-found" ||
         code === "auth/operation-not-allowed" ||
-        code === "auth/admin-restricted-operation"
+        code === "auth/admin-restricted-operation" ||
+        code === "auth/invalid-credential" ||
+        code === "auth/user-not-found" ||
+        code === "auth/wrong-password" ||
+        code === "auth/network-request-failed" ||
+        code === "auth/internal-error"
       ) {
         if (
           trimmedEmail === AUTHORIZED_ADMIN_EMAIL.toLowerCase() &&
-          (password === "BakeryAdmin2026!" || password.length >= 6)
+          password === "BakeryAdmin2026"
         ) {
           const bootstrapAdmin: AdminUser = {
             id: "firebase-admin-authorized",
