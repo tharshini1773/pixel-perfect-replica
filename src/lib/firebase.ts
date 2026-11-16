@@ -1,5 +1,7 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 export const firebaseConfig = {
   apiKey: "AIzaSyCmNFx5PsunzRnQ460ZSv_ZEWWfPSwMN7Y",
@@ -11,9 +13,11 @@ export const firebaseConfig = {
   measurementId: "G-RHFXWNKHQ8",
 };
 
-// Singleton Firebase App and Auth instances
+// Singleton Firebase App, Auth, Firestore, and Storage instances
 export const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth: Auth = getAuth(app);
+export const db: Firestore = getFirestore(app);
+export const storage: FirebaseStorage = getStorage(app);
 
 // Authorized administrator email address
 export const AUTHORIZED_ADMIN_EMAIL = "tharshini1773@gmail.com";

@@ -99,6 +99,7 @@ function AdminOffersPage() {
       await addOffer({
         title: title.trim(),
         code: code.trim() || undefined,
+        discountType: "percentage",
         discountPercentage: pct,
         bannerText: bannerText.trim(),
         startDate: startDate || undefined,
