@@ -15,6 +15,7 @@ import { Route as BrandRouteImport } from './routes/brand'
 import { Route as CakesRouteImport } from './routes/cakes'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CustomCakesRouteImport } from './routes/custom-cakes'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as LocationRouteImport } from './routes/location'
 import { Route as ReviewsRouteImport } from './routes/reviews'
@@ -58,6 +59,11 @@ const ContactRoute = ContactRouteImport.update({
 const CustomCakesRoute = CustomCakesRouteImport.update({
   id: '/custom-cakes',
   path: '/custom-cakes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GalleryRoute = GalleryRouteImport.update({
@@ -138,6 +144,7 @@ export interface FileRoutesByFullPath {
   '/cakes': typeof CakesRoute
   '/contact': typeof ContactRoute
   '/custom-cakes': typeof CustomCakesRoute
+  '/dashboard': typeof DashboardRoute
   '/gallery': typeof GalleryRoute
   '/location': typeof LocationRoute
   '/reviews': typeof ReviewsRoute
@@ -160,6 +167,7 @@ export interface FileRoutesByTo {
   '/cakes': typeof CakesRoute
   '/contact': typeof ContactRoute
   '/custom-cakes': typeof CustomCakesRoute
+  '/dashboard': typeof DashboardRoute
   '/gallery': typeof GalleryRoute
   '/location': typeof LocationRoute
   '/reviews': typeof ReviewsRoute
@@ -183,6 +191,7 @@ export interface FileRoutesById {
   '/cakes': typeof CakesRoute
   '/contact': typeof ContactRoute
   '/custom-cakes': typeof CustomCakesRoute
+  '/dashboard': typeof DashboardRoute
   '/gallery': typeof GalleryRoute
   '/location': typeof LocationRoute
   '/reviews': typeof ReviewsRoute
@@ -207,6 +216,7 @@ export interface FileRouteTypes {
     | '/cakes'
     | '/contact'
     | '/custom-cakes'
+    | '/dashboard'
     | '/gallery'
     | '/location'
     | '/reviews'
@@ -229,6 +239,7 @@ export interface FileRouteTypes {
     | '/cakes'
     | '/contact'
     | '/custom-cakes'
+    | '/dashboard'
     | '/gallery'
     | '/location'
     | '/reviews'
@@ -251,6 +262,7 @@ export interface FileRouteTypes {
     | '/cakes'
     | '/contact'
     | '/custom-cakes'
+    | '/dashboard'
     | '/gallery'
     | '/location'
     | '/reviews'
@@ -274,6 +286,7 @@ export interface RootRouteChildren {
   CakesRoute: typeof CakesRoute
   ContactRoute: typeof ContactRoute
   CustomCakesRoute: typeof CustomCakesRoute
+  DashboardRoute: typeof DashboardRoute
   GalleryRoute: typeof GalleryRoute
   LocationRoute: typeof LocationRoute
   ReviewsRoute: typeof ReviewsRoute
@@ -332,6 +345,13 @@ declare module '@tanstack/react-router' {
       path: '/custom-cakes'
       fullPath: '/custom-cakes'
       preLoaderRoute: typeof CustomCakesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/gallery': {
@@ -442,6 +462,7 @@ const rootRouteChildren: RootRouteChildren = {
   CakesRoute: CakesRoute,
   ContactRoute: ContactRoute,
   CustomCakesRoute: CustomCakesRoute,
+  DashboardRoute: DashboardRoute,
   GalleryRoute: GalleryRoute,
   LocationRoute: LocationRoute,
   ReviewsRoute: ReviewsRoute,

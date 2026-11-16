@@ -36,20 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Subscribe to Firebase Authentication state changes & restore session
+  // Subscribe to Firebase Authentication state changes & verify admin session
   useEffect(() => {
-    // 1. Check local session cache for smooth persistence across refreshes
-    const cached = localStorage.getItem(SESSION_CACHE_KEY) || sessionStorage.getItem(SESSION_CACHE_KEY);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached) as AdminUser;
-        if (parsed?.email?.toLowerCase().trim() === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
-          setUser(parsed);
-        }
-      } catch {}
-    }
-
-    // 2. Listen to Firebase Auth state
+    // Firebase Auth is the SINGLE source of truth for authentication state
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         const userEmail = (firebaseUser.email || "").toLowerCase().trim();
@@ -68,8 +57,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // If a non-authorized user somehow authenticates, sign out immediately
           firebaseSignOut(auth);
           localStorage.removeItem(SESSION_CACHE_KEY);
+          sessionStorage.removeItem(SESSION_CACHE_KEY);
           setUser(null);
         }
+      } else {
+        // No Firebase user is authenticated -> clear any lingering local cache
+        setUser(null);
+        localStorage.removeItem(SESSION_CACHE_KEY);
+        sessionStorage.removeItem(SESSION_CACHE_KEY);
       }
       setLoading(false);
     });

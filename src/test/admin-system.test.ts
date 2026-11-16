@@ -71,6 +71,7 @@ describe("Admin Routing & Protection Verification", () => {
     const routeAction = (path: string, isAuthenticated: boolean) => {
       if (path === "/admin") return "/admin/login";
       if (path === "/admin/login") return "AdminLoginPage";
+      if (path === "/dashboard") return isAuthenticated ? "AdminDashboard" : "/admin/login";
       if (path.startsWith("/admin/") && !isAuthenticated) return "/admin/login";
       return "AdminDashboard";
     };
@@ -79,6 +80,8 @@ describe("Admin Routing & Protection Verification", () => {
     expect(routeAction("/admin", true)).toBe("/admin/login");
     expect(routeAction("/admin/login", false)).toBe("AdminLoginPage");
     expect(routeAction("/admin/login", true)).toBe("AdminLoginPage");
+    expect(routeAction("/dashboard", false)).toBe("/admin/login");
+    expect(routeAction("/dashboard", true)).toBe("AdminDashboard");
     expect(routeAction("/admin/dashboard", false)).toBe("/admin/login");
     expect(routeAction("/admin/dashboard", true)).toBe("AdminDashboard");
     expect(routeAction("/admin/orders", false)).toBe("/admin/login");
