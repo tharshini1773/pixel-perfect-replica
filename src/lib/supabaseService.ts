@@ -214,7 +214,9 @@ export async function createOrderInSupabase(
   const now = new Date().toISOString();
 
   try {
-    // 1. Upsert customer
+    // 1. Upsert customer — INSERT with zero counters (RLS enforces this),
+    //    then UPDATE counters separately (admin policy handles that path
+    //    when admin is signed in; otherwise counters stay at zero until admin sync)
     await (supabase
       .from("customers")
       .upsert(
@@ -224,10 +226,10 @@ export async function createOrderInSupabase(
           email: payload.customerEmail ?? null,
           phone: payload.customerPhone,
           address: payload.deliveryAddress ?? null,
-          total_orders: 1,
-          total_spent: payload.totalAmount,
+          total_orders: 0,
+          total_spent: 0,
         },
-        { onConflict: "phone", ignoreDuplicates: false },
+        { onConflict: "phone", ignoreDuplicates: true },   // keep existing counters
       )
       .select("id")
       .single() as any);
@@ -245,7 +247,7 @@ export async function createOrderInSupabase(
         cake_message: payload.cakeMessage ?? null,
         notes: payload.notes ?? null,
         total_amount: payload.totalAmount,
-        payment_status: "paid",
+        payment_status: "pending",
         order_status: "new",
         payment_method: payload.paymentMethod ?? "UPI / Online",
         created_at: now,
