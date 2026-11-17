@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Menu, X, Bell, ExternalLink, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SupabaseStatus } from "./SupabaseStatus";
 
 export interface AdminHeaderProps {
   onToggleMobileMenu?: () => void;
@@ -38,6 +39,9 @@ export function AdminHeader({
         <div className="flex items-center gap-2">
           <span className="text-xs sm:text-sm md:text-base font-semibold text-[#8C7A70]">
             Welcome, <span className="font-bold text-rose">{userName}!</span>
+          </span>
+          <span className="hidden lg:inline-flex">
+            <SupabaseStatus compact />
           </span>
         </div>
       </div>

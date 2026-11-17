@@ -8,6 +8,7 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth";
 import { auth, AUTHORIZED_ADMIN_EMAIL, getFirebaseErrorMessage } from "@/lib/firebase";
+import { supabase, isAuthorizedAdminEmail } from "@/lib/supabase";
 
 export interface AdminUser {
   id: string;
@@ -138,6 +139,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(adminUser));
       }
+
+      // Phase 4: Also sign in to Supabase Auth so RLS admin policies work
+      // Run silently – Supabase auth failure should NOT block the admin login
+      supabase.auth
+        .signInWithPassword({ email: trimmedEmail, password })
+        .catch(() => {});
+
       setLoading(false);
       return { success: true };
     } catch (err: any) {
@@ -172,6 +180,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(bootstrapAdmin));
           }
+          // Also sign in to Supabase so RLS policies work for database operations
+          supabase.auth
+            .signInWithPassword({ email: trimmedEmail, password })
+            .catch(() => {});
           setLoading(false);
           return { success: true };
         }
@@ -187,13 +199,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Secure Sign-Out via Firebase Authentication
+   * Secure Sign-Out via Firebase Authentication + Supabase
    */
   const logout = async () => {
     try {
       await firebaseSignOut(auth);
+      // Also sign out from Supabase if signed in there
+      await supabase.auth.signOut().catch(() => {});
     } catch (err) {
-      console.error("Firebase logout error:", err);
+      console.error("Logout error:", err);
     } finally {
       localStorage.removeItem(SESSION_CACHE_KEY);
       sessionStorage.removeItem(SESSION_CACHE_KEY);

@@ -11,6 +11,23 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { products as staticProducts, categories as staticCategories } from "@/config/products";
 import { business } from "@/config/business";
+import {
+  fetchProducts as sbFetchProducts,
+  fetchOrders as sbFetchOrders,
+  fetchCustomers as sbFetchCustomers,
+  fetchOffers as sbFetchOffers,
+  createOrderInSupabase,
+  updateOrderStatus as sbUpdateOrderStatus,
+  updateOrderPaymentStatus as sbUpdateOrderPaymentStatus,
+  deleteOrderFromSupabase,
+  upsertProduct as sbUpsertProduct,
+  updateProduct as sbUpdateProduct,
+  deleteProduct as sbDeleteProduct,
+  upsertOffer as sbUpsertOffer,
+  updateOffer as sbUpdateOffer,
+  deleteOfferFromSupabase,
+  isTableMissing,
+} from "@/lib/supabaseService";
 
 // ================= TYPES =================
 
@@ -972,6 +989,99 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
       } finally {
         if (isMounted) setSyncingFirestore(false);
       }
+
+      // 3. Supabase Background Synchronization (Phase 5–6)
+      // Runs silently after Firestore. If tables don't exist yet, falls back gracefully.
+      try {
+        const [sbProducts, sbOrders, sbCustomers, sbOffers] = await Promise.all([
+          sbFetchProducts(),
+          sbFetchOrders(),
+          sbFetchCustomers(),
+          sbFetchOffers(),
+        ]);
+
+        if (isMounted && sbProducts.length > 0) {
+          // Map Supabase schema → StoreProduct schema
+          const mapped: StoreProduct[] = sbProducts.map((p) => ({
+            id: p.id,
+            name: p.name,
+            category: p.category,
+            description: p.description || "",
+            price: p.price,
+            weight: p.weight || "1 kg",
+            image: p.image_url,
+            isAvailable: p.availability,
+            stock: p.stock ?? 10,
+            isFeatured: false,
+          }));
+          const healed = mapped.map(healProductImage);
+          setProducts(healed);
+          localStorage.setItem(KEY_PRODUCTS, JSON.stringify(healed));
+        }
+
+        if (isMounted && sbOrders.length > 0) {
+          const mappedOrders: Order[] = sbOrders.map((o) => ({
+            id: o.id,
+            customerName: o.customer_name,
+            customerEmail: o.customer_email ?? undefined,
+            customerPhone: o.phone,
+            deliveryAddress: o.delivery_address ?? undefined,
+            deliveryDate: o.delivery_date ?? undefined,
+            cakeMessage: o.cake_message ?? undefined,
+            notes: o.notes ?? undefined,
+            totalAmount: o.total_amount,
+            status: (o.order_status as OrderStatus) || "pending",
+            paymentStatus: (o.payment_status as PaymentStatus) || "paid",
+            paymentMethod: o.payment_method ?? "UPI / Online",
+            items: (o.order_items ?? []).map((item: any) => ({
+              id: item.id,
+              productId: item.product_id ?? undefined,
+              productName: item.product_name,
+              price: item.unit_price,
+              quantity: item.quantity,
+              total: item.subtotal,
+            })),
+            createdAt: o.created_at || new Date().toISOString(),
+            updatedAt: o.updated_at || new Date().toISOString(),
+          }));
+          setOrders(mappedOrders);
+          localStorage.setItem(KEY_ORDERS, JSON.stringify(mappedOrders));
+        }
+
+        if (isMounted && sbCustomers.length > 0) {
+          const mappedCustomers: Customer[] = sbCustomers.map((c) => ({
+            id: c.id,
+            name: c.name,
+            email: c.email ?? undefined,
+            phone: c.phone,
+            address: c.address ?? undefined,
+            totalOrders: c.total_orders ?? 0,
+            totalSpent: c.total_spent ?? 0,
+            lastOrderAt: c.created_at || new Date().toISOString(),
+          }));
+          setCustomers(mappedCustomers);
+          localStorage.setItem(KEY_CUSTOMERS, JSON.stringify(mappedCustomers));
+        }
+
+        if (isMounted && sbOffers.length > 0) {
+          const mappedOffers: Offer[] = sbOffers.map((of) => ({
+            id: of.id,
+            title: of.title,
+            code: of.coupon_code ?? undefined,
+            discountType: "percentage" as const,
+            discountPercentage: of.discount_percentage,
+            bannerText: of.banner_text || of.description || of.title,
+            startDate: of.start_date ?? undefined,
+            endDate: of.expiry_date ?? undefined,
+            isActive: of.is_active,
+          }));
+          setOffers(mappedOffers);
+          localStorage.setItem(KEY_OFFERS, JSON.stringify(mappedOffers));
+        }
+      } catch (sbErr) {
+        // Supabase sync is best-effort; never blocks the app
+        console.info("Supabase background sync (non-blocking):", sbErr);
+      }
     }
 
     loadData();
@@ -997,6 +1107,18 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Firestore addProduct offline fallback:", e);
     }
+    // Also sync to Supabase
+    sbUpsertProduct({
+      id: newProduct.id,
+      name: newProduct.name,
+      description: newProduct.description || null,
+      price: newProduct.price,
+      category: newProduct.category,
+      image_url: newProduct.image,
+      availability: newProduct.isAvailable,
+      weight: newProduct.weight || "1 kg",
+      stock: newProduct.stock || 10,
+    }).catch(() => {});
 
     return newProduct;
   };
@@ -1011,6 +1133,19 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Firestore updateProduct fallback:", e);
     }
+    // Supabase sync
+    const sbUpdates: any = {};
+    if (updates.name !== undefined) sbUpdates.name = updates.name;
+    if (updates.description !== undefined) sbUpdates.description = updates.description;
+    if (updates.price !== undefined) sbUpdates.price = updates.price;
+    if (updates.category !== undefined) sbUpdates.category = updates.category;
+    if (updates.image !== undefined) sbUpdates.image_url = updates.image;
+    if (updates.isAvailable !== undefined) sbUpdates.availability = updates.isAvailable;
+    if (updates.weight !== undefined) sbUpdates.weight = updates.weight;
+    if (updates.stock !== undefined) sbUpdates.stock = updates.stock;
+    if (Object.keys(sbUpdates).length > 0) {
+      sbUpdateProduct(id, sbUpdates).catch(() => {});
+    }
   };
 
   const deleteProduct = async (id: string): Promise<void> => {
@@ -1023,6 +1158,8 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Firestore deleteProduct fallback:", e);
     }
+    // Supabase sync
+    sbDeleteProduct(id).catch(() => {});
   };
 
   const toggleProductAvailability = async (id: string): Promise<void> => {
@@ -1180,6 +1317,28 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
       console.warn("Firestore createOrder fallback:", e);
     }
 
+    // Also persist to Supabase (Phase 6: Customer Order Creation)
+    createOrderInSupabase({
+      id,
+      customerName: orderData.customerName,
+      customerEmail: orderData.customerEmail,
+      customerPhone: orderData.customerPhone,
+      deliveryAddress: orderData.deliveryAddress,
+      deliveryDate: orderData.deliveryDate,
+      cakeMessage: orderData.cakeMessage,
+      notes: orderData.notes,
+      totalAmount: orderData.totalAmount,
+      paymentMethod: orderData.paymentMethod,
+      items: orderData.items.map((it) => ({
+        id: it.id,
+        productId: it.productId,
+        productName: it.productName,
+        quantity: it.quantity,
+        price: it.price,
+        total: it.total,
+      })),
+    }).catch(() => {});
+
     return newOrder;
   };
 
@@ -1193,6 +1352,8 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Firestore updateOrderStatus fallback:", e);
     }
+    // Supabase sync
+    sbUpdateOrderStatus(orderId, status as any).catch(() => {});
   };
 
   const updateOrderPaymentStatus = async (orderId: string, paymentStatus: PaymentStatus): Promise<void> => {
@@ -1205,6 +1366,9 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Firestore updateOrderPaymentStatus fallback:", e);
     }
+
+    // Supabase sync
+    sbUpdateOrderPaymentStatus(orderId, paymentStatus as any).catch(() => {});
   };
 
   const deleteOrder = async (orderId: string): Promise<void> => {
@@ -1217,6 +1381,9 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Firestore deleteOrder fallback:", e);
     }
+
+    // Supabase sync
+    deleteOrderFromSupabase(orderId).catch(() => {});
   };
 
   // ================= CRUD: INVENTORY =================
@@ -1309,6 +1476,19 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Firestore addOffer fallback:", e);
     }
+
+    // Supabase sync
+    sbUpsertOffer({
+      id: newOffer.id,
+      title: newOffer.title,
+      description: newOffer.description ?? "",
+      discount_percentage: newOffer.discountPercentage ?? 0,
+      coupon_code: newOffer.couponCode ?? "",
+      start_date: newOffer.startDate ?? null,
+      expiry_date: newOffer.expiryDate ?? null,
+      is_active: newOffer.isActive ?? true,
+    } as any).catch(() => {});
+
     return newOffer;
   };
 
@@ -1322,6 +1502,19 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Firestore updateOffer fallback:", e);
     }
+
+    // Supabase sync — map app field names to DB column names
+    const sbUpdates: Record<string, any> = {};
+    if (updates.title !== undefined) sbUpdates.title = updates.title;
+    if (updates.description !== undefined) sbUpdates.description = updates.description;
+    if (updates.discountPercentage !== undefined) sbUpdates.discount_percentage = updates.discountPercentage;
+    if (updates.couponCode !== undefined) sbUpdates.coupon_code = updates.couponCode;
+    if (updates.startDate !== undefined) sbUpdates.start_date = updates.startDate;
+    if (updates.expiryDate !== undefined) sbUpdates.expiry_date = updates.expiryDate;
+    if (updates.isActive !== undefined) sbUpdates.is_active = updates.isActive;
+    if (Object.keys(sbUpdates).length > 0) {
+      sbUpdateOffer(id, sbUpdates).catch(() => {});
+    }
   };
 
   const deleteOffer = async (id: string): Promise<void> => {
@@ -1334,6 +1527,9 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Firestore deleteOffer fallback:", e);
     }
+
+    // Supabase sync
+    deleteOfferFromSupabase(id).catch(() => {});
   };
 
   const toggleOfferActive = async (id: string): Promise<void> => {
