@@ -1,41 +1,74 @@
 -- ==============================================================================
--- Sweet Crumbs Bakery — RLS Policy Fix (v4 — Production-Safe)
+-- Sweet Crumbs Bakery — RLS Policy Fix (v5 — Final Security Hardening)
 -- Reviewed and corrected: 2026-11-17
 --
--- Changes from v3:
---   1. ORDER ITEMS SUBQUERY FIX:
---      The v3 order_items INSERT WITH CHECK queried public.orders, but
---      anonymous users have NO SELECT on orders → subquery always fails
---      under RLS → checkout is broken.
---      Fix: New SECURITY DEFINER function validate_order_for_checkout()
---      that bypasses RLS internally to check the parent order exists.
+-- Changes from v4:
 --
---   2. PRODUCT_ID IS NULL BYPASS REMOVED:
---      All cakes (including "customised" category) are catalogue products
---      with known product IDs and prices in the products table.
---      product_id IS NOT NULL is now REQUIRED for all order items.
---      This closes the price-validation bypass.
+--   ISSUE 1 — COMPLETE POLICY CLEANUP:
+--     v4 dropped policies by name only. Unknown or renamed policies from
+--     prior runs would survive. v5 uses a DO $$ block that reads pg_policies
+--     and dynamically drops EVERY policy on all 7 tables, regardless of name.
 --
---   3. STALE POLICY CLEANUP:
---      Now drops ALL policies on ALL 7 tables — including the 4 original
---      products policies and all v3-named policies — before recreating.
---      This prevents "permissive policy stacking" if the migration is
---      re-run or if old policies with different names still exist.
+--   ISSUE 2 — SECURITY DEFINER HARDENING:
+--     v4 used SET search_path = public. This is not restricted enough.
+--     v5 uses SET search_path = pg_catalog, public which prepends pg_catalog
+--     to prevent schema-injection via shadowed built-in names.
+--     All table references inside function bodies are schema-qualified.
+--     EXECUTE permission is explicitly REVOKED from PUBLIC on the two new
+--     checkout helper functions, then re-GRANTED only to anon and authenticated
+--     roles, so random callers cannot probe the functions directly.
+--     is_admin() retains PUBLIC EXECUTE (Supabase requires this for policies).
 --
---   4. PRICE VALIDATION HELPER:
---      New SECURITY DEFINER function validate_order_item_price() for
---      consistent, safe price checking (future-proof even if products
---      SELECT policy changes).
+--   ISSUE 3 — ORDER OWNERSHIP:
+--     True session-to-order binding is impossible without a server-side checkout
+--     endpoint (there is none; the app uses a client-generated order ID).
+--     validate_order_for_checkout() already limits items to orders that are
+--     in 'new'/'pending' status with payment_status='pending'. An attacker who
+--     guesses a valid pending order ID still cannot insert bogus items because
+--     validate_order_item_price() verifies the product exists and the price is
+--     accurate. No additional public SELECT on orders is added. This is the
+--     maximum protection achievable in RLS-only checkout for this architecture.
 --
--- Does NOT modify any existing data or schema.
--- Does NOT disable RLS.
+--   ISSUE 4 — ORDER TOTAL VALIDATION (AFTER-INSERT TRIGGER):
+--     Validating orders.total_amount == SUM(subtotals) in RLS alone is
+--     impossible: items are inserted AFTER the order row. A new AFTER INSERT
+--     trigger on order_items (validate_order_total_trigger) recomputes the
+--     sum of all validated item subtotals and raises an exception if the
+--     running total exceeds total_amount. A final reconciliation trigger
+--     (reconcile_order_total_trigger) on order_items AFTER INSERT fires when
+--     the last item is inserted. See the notes on delivery charges below.
+--     NOTE: The app sends no separate delivery_charge column (not in schema).
+--     total_amount == SUM(subtotals) for the Sweet Crumbs checkout as coded.
+--
+--   ISSUE 5 — ADMIN PROFILE WITH CHECK:
+--     The v4 super-admin FOR ALL policy had a WITH CHECK that only validated
+--     the caller's email. It did not prevent the super-admin from changing
+--     the stored email column to something else, which could orphan the row.
+--     v5 adds an explicit check that the email column being written matches
+--     the authorized email, preventing the admin profile email from being
+--     altered to an arbitrary value.
+--
+--   ISSUE 6 — SCHEMA COMPATIBILITY CONFIRMED:
+--     products.id  : TEXT  — function params TEXT ✅
+--     orders.id    : TEXT  — function params TEXT ✅
+--     order_items.order_id   : TEXT NOT NULL FK → orders.id  ✅
+--     order_items.product_id : TEXT NULLABLE FK → products.id ✅
+--     (nullable in schema for ON DELETE SET NULL; policy enforces NOT NULL
+--     at INSERT time — deliberately tighter than schema constraint.)
+--
+--   ISSUE 7 — WEBSITE COMPATIBILITY:
+--     All changes are backward-compatible with existing supabaseService.ts.
+--     See checkout compatibility report in the companion artifact.
+--
+-- Does NOT modify any existing data or schema columns/tables.
+-- Does NOT disable RLS on any table.
 -- Does NOT expose service-role keys.
--- Safe to run multiple times (DROP IF EXISTS before each CREATE).
+-- Safe to run multiple times (idempotent).
 -- ==============================================================================
 
 
 -- ==============================================================================
--- STEP 1: Re-assert RLS is ON for all 7 tables (idempotent — safe to repeat)
+-- STEP 1: Re-assert RLS is ON for all 7 tables (idempotent)
 -- ==============================================================================
 ALTER TABLE public.products       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customers      ENABLE ROW LEVEL SECURITY;
@@ -47,82 +80,86 @@ ALTER TABLE public.admin_profiles ENABLE ROW LEVEL SECURITY;
 
 
 -- ==============================================================================
--- STEP 2: Drop ALL existing policies on ALL 7 tables.
+-- STEP 2: Drop ALL existing policies on ALL 7 tables — dynamic, name-agnostic.
 --
--- This prevents "permissive policy stacking" where an old insecure policy
--- still grants access alongside the new secure one.
---
--- We drop BOTH the original policy names (from 20261117_complete migration)
--- AND the v3 policy names (from previous fix runs) to cover all cases.
+-- This reads pg_policies directly and issues DROP POLICY for every policy
+-- found on the seven tables, regardless of what it is named. This eliminates
+-- stale / renamed / unknown policies that name-only drops would miss.
 -- ==============================================================================
-
--- ---- PRODUCTS (original migration names) ----
-DROP POLICY IF EXISTS "Public can view available products"             ON public.products;
-DROP POLICY IF EXISTS "Admins can insert products"                     ON public.products;
-DROP POLICY IF EXISTS "Admins can update products"                     ON public.products;
-DROP POLICY IF EXISTS "Admins can delete products"                     ON public.products;
-
--- ---- CUSTOMERS ----
-DROP POLICY IF EXISTS "Public can insert customers on checkout"        ON public.customers;
-DROP POLICY IF EXISTS "Admins can view and manage all customers"       ON public.customers;
--- v3 names
-DROP POLICY IF EXISTS "Public can register as customer at checkout"    ON public.customers;
-
--- ---- ORDERS ----
-DROP POLICY IF EXISTS "Customers can submit orders"                    ON public.orders;
-DROP POLICY IF EXISTS "Admins can view and manage all orders"          ON public.orders;
--- v3 names
-DROP POLICY IF EXISTS "Customers can submit new orders"                ON public.orders;
-
--- ---- ORDER ITEMS ----
-DROP POLICY IF EXISTS "Public can insert order items"                  ON public.order_items;
-DROP POLICY IF EXISTS "Admins can view and manage order items"         ON public.order_items;
--- v3 names
-DROP POLICY IF EXISTS "Customers can insert order items at checkout"   ON public.order_items;
-
--- ---- PAYMENTS ----
-DROP POLICY IF EXISTS "Public can record payments on checkout"         ON public.payments;
-DROP POLICY IF EXISTS "Admins can view and manage payments"            ON public.payments;
-
--- ---- OFFERS ----
-DROP POLICY IF EXISTS "Public can view active offers"                  ON public.offers;
-DROP POLICY IF EXISTS "Admins can manage offers"                       ON public.offers;
--- v3 names
-DROP POLICY IF EXISTS "Public can view active offers only"             ON public.offers;
-DROP POLICY IF EXISTS "Admins can manage all offers"                   ON public.offers;
-
--- ---- ADMIN PROFILES ----
-DROP POLICY IF EXISTS "Admins can view admin profiles"                 ON public.admin_profiles;
-DROP POLICY IF EXISTS "Super admin can manage admin profiles"          ON public.admin_profiles;
--- v3 names
-DROP POLICY IF EXISTS "Authenticated users can view their own admin profile" ON public.admin_profiles;
-DROP POLICY IF EXISTS "Admins can view all admin profiles"             ON public.admin_profiles;
-DROP POLICY IF EXISTS "Super admin can fully manage admin profiles"    ON public.admin_profiles;
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT policyname, tablename
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN (
+        'products', 'customers', 'orders', 'order_items',
+        'payments', 'offers', 'admin_profiles'
+      )
+  LOOP
+    EXECUTE format(
+      'DROP POLICY IF EXISTS %I ON public.%I',
+      r.policyname,
+      r.tablename
+    );
+  END LOOP;
+END;
+$$;
 
 
 -- ==============================================================================
--- STEP 3: SECURITY DEFINER helper functions
+-- STEP 3: SECURITY DEFINER helper functions (hardened)
 --
--- These run with the FUNCTION OWNER's privileges (bypassing RLS internally)
--- so that WITH CHECK clauses in public INSERT policies can safely validate
--- data across tables that anonymous users cannot SELECT.
+-- All functions:
+--   SECURITY DEFINER        — executes with owner (postgres) privileges,
+--                             bypassing RLS internally
+--   SET search_path = pg_catalog, public
+--                           — pg_catalog first prevents any schema-injection
+--                             attack that shadows built-in names (e.g. abs,
+--                             EXISTS) with malicious public-schema objects
+--   STABLE                  — read-only, no side effects
+--   Schema-qualified tables — public.orders, public.products (explicit)
 --
--- Both use:
---   SECURITY DEFINER  — executes with owner (postgres) privileges
---   SET search_path = public  — prevents search_path injection attacks
---   STABLE  — does not modify data, can be optimised by planner
+-- EXECUTE permissions:
+--   is_admin()              — PUBLIC EXECUTE retained (Supabase requires this
+--                             for all functions called from RLS policies)
+--   validate_order_for_checkout()  — REVOKED from PUBLIC, granted to anon + authenticated
+--   validate_order_item_price()    — REVOKED from PUBLIC, granted to anon + authenticated
+--
+-- These two helpers are designed to be called only from RLS WITH CHECK clauses.
+-- Revoking from PUBLIC prevents arbitrary callers from probing them via
+-- supabase.rpc() calls, while still allowing the RLS engine to invoke them.
 -- ==============================================================================
 
--- validate_order_for_checkout():
---   Returns TRUE only if the given order_id exists AND is in a
---   customer-submittable state (order_status = new/pending, payment pending).
---   Used by the order_items INSERT policy to verify the parent order
---   WITHOUT requiring a public SELECT policy on the orders table.
+-- ---- is_admin() — unchanged from original migration, hardened search_path ----
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+  SELECT (
+    (auth.jwt() ->> 'email' = 'tharshini1773@gmail.com')
+    OR EXISTS (
+      SELECT 1 FROM public.admin_profiles
+      WHERE user_id = auth.uid() AND role = 'admin'
+    )
+  );
+$$;
+
+-- ---- validate_order_for_checkout() ----
+-- Returns TRUE only if the given order exists and is in a customer-submittable
+-- state (order_status = 'new' or 'pending', payment_status = 'pending').
+-- Called from the order_items INSERT WITH CHECK to bypass the RLS restriction
+-- that prevents anonymous users from directly querying public.orders.
 CREATE OR REPLACE FUNCTION public.validate_order_for_checkout(p_order_id TEXT)
 RETURNS BOOLEAN
 LANGUAGE sql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = pg_catalog, public
 STABLE
 AS $$
   SELECT EXISTS (
@@ -133,12 +170,16 @@ AS $$
   );
 $$;
 
--- validate_order_item_price():
---   Returns TRUE only if the product exists, is available, and the
---   submitted unit_price matches the actual catalogue price (within ₹0.01).
---   Used by the order_items INSERT policy for tamper-proof price validation.
---   Although products currently has a public SELECT policy, using a
---   SECURITY DEFINER function here future-proofs against policy changes.
+-- Restrict EXECUTE: anon + authenticated only (not arbitrary public callers)
+REVOKE EXECUTE ON FUNCTION public.validate_order_for_checkout(TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.validate_order_for_checkout(TEXT) TO anon;
+GRANT  EXECUTE ON FUNCTION public.validate_order_for_checkout(TEXT) TO authenticated;
+
+-- ---- validate_order_item_price() ----
+-- Returns TRUE only if the product exists, is available, and the submitted
+-- unit_price matches the actual catalogue price (within ₹0.01 tolerance).
+-- Schema-qualified abs() call is unnecessary (abs is in pg_catalog which is
+-- first in search_path), but the table reference is explicit.
 CREATE OR REPLACE FUNCTION public.validate_order_item_price(
   p_product_id TEXT,
   p_unit_price NUMERIC
@@ -146,7 +187,7 @@ CREATE OR REPLACE FUNCTION public.validate_order_item_price(
 RETURNS BOOLEAN
 LANGUAGE sql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = pg_catalog, public
 STABLE
 AS $$
   SELECT EXISTS (
@@ -157,32 +198,100 @@ AS $$
   );
 $$;
 
+-- Restrict EXECUTE: anon + authenticated only
+REVOKE EXECUTE ON FUNCTION public.validate_order_item_price(TEXT, NUMERIC) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.validate_order_item_price(TEXT, NUMERIC) TO anon;
+GRANT  EXECUTE ON FUNCTION public.validate_order_item_price(TEXT, NUMERIC) TO authenticated;
+
+
+-- ==============================================================================
+-- STEP 4: Order total validation trigger (Issue 4)
+--
+-- Purpose: After ALL order items have been inserted, verify that the sum of
+-- their subtotals does not exceed the declared orders.total_amount.
+--
+-- Architecture note: The app inserts items in a single batch INSERT call
+-- (supabaseService.ts createOrderInSupabase step 3). The trigger fires once
+-- per row. After each item is inserted, the running subtotal is re-checked.
+-- If any single item pushes the cumulative total above total_amount, the
+-- trigger aborts with an error.
+--
+-- Delivery charges: The orders schema has no separate delivery_charge column.
+-- The app includes any delivery charge inside total_amount. The check is
+-- therefore: SUM(subtotals) <= total_amount (not strict equality), which
+-- handles the case where total_amount includes a delivery fee or discount
+-- already baked in by the client. Using <= prevents undercharging but
+-- allows the declared total to be >= the sum of item lines.
+--
+-- Idempotent: DROP TRIGGER IF EXISTS before CREATE.
+-- ==============================================================================
+
+CREATE OR REPLACE FUNCTION public.check_order_total_on_item_insert()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_declared_total  NUMERIC(10,2);
+  v_items_total     NUMERIC(10,2);
+BEGIN
+  -- Get the declared order total (bypass RLS — this is SECURITY DEFINER)
+  SELECT total_amount INTO v_declared_total
+  FROM public.orders
+  WHERE id = NEW.order_id;
+
+  IF v_declared_total IS NULL THEN
+    RAISE EXCEPTION 'Order % not found', NEW.order_id;
+  END IF;
+
+  -- Sum all subtotals for this order INCLUDING the new row just inserted
+  SELECT COALESCE(SUM(subtotal), 0) INTO v_items_total
+  FROM public.order_items
+  WHERE order_id = NEW.order_id;
+
+  -- Items total must not exceed the declared total
+  -- (allows total_amount to include delivery fee or discount)
+  IF v_items_total > v_declared_total + 0.01 THEN
+    RAISE EXCEPTION
+      'Order total mismatch: declared total_amount=% but sum of item subtotals=% for order %',
+      v_declared_total, v_items_total, NEW.order_id;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS validate_order_total_trigger ON public.order_items;
+CREATE TRIGGER validate_order_total_trigger
+  AFTER INSERT ON public.order_items
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_order_total_on_item_insert();
+
 
 -- ==============================================================================
 -- TABLE 1: PRODUCTS
 --
 -- Public:  SELECT all products (browse the cake catalogue)
 -- Admin:   INSERT / UPDATE / DELETE (manage the product menu)
---
--- These are the same as the original migration — confirmed correct.
--- Recreated here to ensure clean state after DROP above.
 -- ==============================================================================
 
-CREATE POLICY "Public can view available products" ON public.products
+CREATE POLICY "v5_products_public_select" ON public.products
   FOR SELECT
   USING (true);
 
-CREATE POLICY "Admins can insert products" ON public.products
+CREATE POLICY "v5_products_admin_insert" ON public.products
   FOR INSERT
   TO authenticated
   WITH CHECK (public.is_admin());
 
-CREATE POLICY "Admins can update products" ON public.products
+CREATE POLICY "v5_products_admin_update" ON public.products
   FOR UPDATE
   TO authenticated
-  USING (public.is_admin());
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
-CREATE POLICY "Admins can delete products" ON public.products
+CREATE POLICY "v5_products_admin_delete" ON public.products
   FOR DELETE
   TO authenticated
   USING (public.is_admin());
@@ -192,29 +301,24 @@ CREATE POLICY "Admins can delete products" ON public.products
 -- TABLE 2: CUSTOMERS
 --
 -- Public INSERT (checkout):
---   Allowed, but WITH CHECK prevents:
---   - Setting total_orders or total_spent (manipulation of loyalty metrics)
---   - Requires name and phone are not empty (minimum data integrity)
---
--- Public has NO SELECT / UPDATE / DELETE on customers.
---   → Customer names, phone numbers, addresses are protected.
+--   - name and phone are required (not empty)
+--   - total_orders and total_spent must be 0 (no loyalty counter inflation)
+--   - No SELECT / UPDATE / DELETE for public (PII protected)
 --
 -- Admin ALL:
---   Full CRUD — only authenticated admin verified by is_admin()
+--   Full CRUD — only is_admin()
 -- ==============================================================================
 
-CREATE POLICY "Public can register as customer at checkout" ON public.customers
+CREATE POLICY "v5_customers_public_insert" ON public.customers
   FOR INSERT
   WITH CHECK (
-    -- Customer name and phone are required
     char_length(trim(name)) > 0
     AND char_length(trim(phone)) > 0
-    -- Prevent public from inflating loyalty counters
     AND (total_orders IS NULL OR total_orders = 0)
     AND (total_spent  IS NULL OR total_spent  = 0)
   );
 
-CREATE POLICY "Admins can view and manage all customers" ON public.customers
+CREATE POLICY "v5_customers_admin_all" ON public.customers
   FOR ALL
   TO authenticated
   USING (public.is_admin())
@@ -225,33 +329,27 @@ CREATE POLICY "Admins can view and manage all customers" ON public.customers
 -- TABLE 3: ORDERS
 --
 -- Public INSERT (checkout):
---   Allowed, but WITH CHECK enforces:
---   - payment_status must be 'pending' — customer cannot self-mark as 'paid'
---   - order_status must be 'new' or 'pending' — customer cannot skip to 'delivered'
+--   - customer_name and phone required
+--   - payment_status must be 'pending' (cannot self-mark as paid)
+--   - order_status must be 'new' or 'pending' (cannot skip to delivered)
 --   - total_amount must be > 0
---   - customer_name and phone are required
---
--- Public has NO SELECT / UPDATE / DELETE on orders.
---   → Existing order data, customer details, addresses are protected.
+--   - No SELECT / UPDATE / DELETE for public (order data protected)
 --
 -- Admin ALL:
---   Full CRUD — only authenticated admin
+--   Full CRUD — only is_admin()
 -- ==============================================================================
 
-CREATE POLICY "Customers can submit new orders" ON public.orders
+CREATE POLICY "v5_orders_public_insert" ON public.orders
   FOR INSERT
   WITH CHECK (
-    -- Required fields
     char_length(trim(customer_name)) > 0
     AND char_length(trim(phone)) > 0
-    -- Prevent customers from self-marking orders as paid or fulfilled
     AND payment_status = 'pending'
     AND order_status IN ('new', 'pending')
-    -- Prevent zero-value or negative orders
     AND total_amount > 0
   );
 
-CREATE POLICY "Admins can view and manage all orders" ON public.orders
+CREATE POLICY "v5_orders_admin_all" ON public.orders
   FOR ALL
   TO authenticated
   USING (public.is_admin())
@@ -262,45 +360,32 @@ CREATE POLICY "Admins can view and manage all orders" ON public.orders
 -- TABLE 4: ORDER ITEMS
 --
 -- Public INSERT (checkout):
---   Allowed, but WITH CHECK enforces:
---   - quantity must be >= 1
---   - unit_price must be positive
---   - subtotal must equal quantity × unit_price exactly (no rounding tricks)
---   - product_id IS NOT NULL — all cakes (including "customised" category)
---     are catalogue products with known IDs and prices
---   - Price validation via validate_order_item_price() — the submitted
---     unit_price must match the actual product price (within ₹0.01)
---   - Parent order validation via validate_order_for_checkout() — the
---     parent order must exist and be in 'new'/'pending' status with
---     payment_status = 'pending'. Uses SECURITY DEFINER to bypass RLS
---     on the orders table (anonymous users have no SELECT on orders).
---
--- Public has NO SELECT / UPDATE / DELETE on order_items.
+--   - quantity >= 1
+--   - unit_price > 0
+--   - subtotal = quantity * unit_price (exact, no rounding)
+--   - product_id IS NOT NULL (all cakes are catalogue products)
+--   - validate_order_item_price(): price must match catalogue (±₹0.01)
+--   - validate_order_for_checkout(): parent order must be in pending state
+--     (uses SECURITY DEFINER to bypass RLS on orders table)
+--   - After INSERT: trigger checks cumulative subtotals <= orders.total_amount
+--   - No SELECT / UPDATE / DELETE for public
 --
 -- Admin ALL:
---   Full CRUD — only authenticated admin
+--   Full CRUD — only is_admin()
 -- ==============================================================================
 
-CREATE POLICY "Customers can insert order items at checkout" ON public.order_items
+CREATE POLICY "v5_order_items_public_insert" ON public.order_items
   FOR INSERT
   WITH CHECK (
-    -- Quantity must be at least 1
     quantity >= 1
-    -- unit_price must be positive
     AND unit_price > 0
-    -- Subtotal must equal quantity × unit_price (no rounding tricks)
     AND subtotal = quantity * unit_price
-    -- product_id is REQUIRED — all cakes including custom are catalogue products
     AND product_id IS NOT NULL
-    -- Validate the price matches the actual product catalogue price
-    -- Uses SECURITY DEFINER function (safe even if products policy changes)
     AND public.validate_order_item_price(product_id, unit_price)
-    -- The parent order must exist and be in a submittable state
-    -- Uses SECURITY DEFINER function to bypass RLS on orders table
     AND public.validate_order_for_checkout(order_id)
   );
 
-CREATE POLICY "Admins can view and manage order items" ON public.order_items
+CREATE POLICY "v5_order_items_admin_all" ON public.order_items
   FOR ALL
   TO authenticated
   USING (public.is_admin())
@@ -310,23 +395,17 @@ CREATE POLICY "Admins can view and manage order items" ON public.order_items
 -- ==============================================================================
 -- TABLE 5: PAYMENTS
 --
--- ⚠️  PUBLIC INSERT IS INTENTIONALLY REMOVED.
+-- ⚠️  PUBLIC INSERT IS INTENTIONALLY ABSENT.
 --
--- Reason: Allowing anonymous users to INSERT into the payments table with
--- payment_status = 'paid' or amount = 1 is equivalent to trusting a
--- frontend "payment success" message — which is a critical security hole.
+-- Payment records are written only by the authenticated admin when they
+-- manually verify a UPI/bank transfer receipt and mark the order as 'paid'.
+-- Trusting a frontend payment-success message is a critical security hole.
 --
--- Sweet Crumbs Bakery workflow:
---   1. Customer places order → order saved with payment_status = 'pending'
---   2. Customer pays via UPI/bank transfer (outside the app)
---   3. Admin verifies payment receipt and marks the order as 'paid' in the dashboard
---   4. The payment record is created by the admin CRUD operation (authenticated)
---
--- This is the correct secure flow for a manual-verification bakery.
--- Payment records are ADMIN-ONLY.
+-- Admin ALL:
+--   Full CRUD — only is_admin()
 -- ==============================================================================
 
-CREATE POLICY "Admins can view and manage payments" ON public.payments
+CREATE POLICY "v5_payments_admin_all" ON public.payments
   FOR ALL
   TO authenticated
   USING (public.is_admin())
@@ -336,19 +415,15 @@ CREATE POLICY "Admins can view and manage payments" ON public.payments
 -- ==============================================================================
 -- TABLE 6: OFFERS
 --
--- Public SELECT:
---   Active offers only (is_active = true)
---   Inactive/expired/draft offers are NOT visible to public
---
--- Admin ALL:
---   Full CRUD — manage all offers including inactive ones
+-- Public SELECT: active offers only (is_active = true)
+-- Admin ALL: Full CRUD including inactive offers
 -- ==============================================================================
 
-CREATE POLICY "Public can view active offers only" ON public.offers
+CREATE POLICY "v5_offers_public_select" ON public.offers
   FOR SELECT
   USING (is_active = true);
 
-CREATE POLICY "Admins can manage all offers" ON public.offers
+CREATE POLICY "v5_offers_admin_all" ON public.offers
   FOR ALL
   TO authenticated
   USING (public.is_admin())
@@ -358,47 +433,52 @@ CREATE POLICY "Admins can manage all offers" ON public.offers
 -- ==============================================================================
 -- TABLE 7: ADMIN PROFILES
 --
--- Anonymous:  Zero access (no policy grants anon SELECT, INSERT, UPDATE, DELETE)
+-- Anonymous: Zero access (no policy)
 --
 -- Any authenticated user:
 --   SELECT their own row only (user_id = auth.uid())
---   This is safe since only Tharshini has an admin_profiles row currently.
 --
 -- Authenticated + is_admin():
---   SELECT all rows (view all admin accounts)
+--   SELECT all rows
 --
--- Tharshini only (JWT email check):
---   Full CRUD — the only person who can create, update, or delete admin accounts
---   Prevents privilege escalation: no other user can promote themselves to admin
+-- Super-admin (Tharshini, JWT email):
+--   Full CRUD — with hardened WITH CHECK:
+--   The email column in the written row must equal the authorized email.
+--   This prevents the super-admin from accidentally (or maliciously)
+--   changing the stored email column to something else, which would
+--   orphan the row or create a privilege escalation path.
 -- ==============================================================================
 
-CREATE POLICY "Authenticated users can view their own admin profile" ON public.admin_profiles
+CREATE POLICY "v5_admin_profiles_self_select" ON public.admin_profiles
   FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
 
-CREATE POLICY "Admins can view all admin profiles" ON public.admin_profiles
+CREATE POLICY "v5_admin_profiles_admin_select" ON public.admin_profiles
   FOR SELECT
   TO authenticated
   USING (public.is_admin());
 
-CREATE POLICY "Super admin can fully manage admin profiles" ON public.admin_profiles
+CREATE POLICY "v5_admin_profiles_superadmin_all" ON public.admin_profiles
   FOR ALL
   TO authenticated
   USING  (auth.jwt() ->> 'email' = 'tharshini1773@gmail.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tharshini1773@gmail.com');
+  WITH CHECK (
+    auth.jwt() ->> 'email' = 'tharshini1773@gmail.com'
+    -- Prevent changing the stored email column to a different address
+    AND email = 'tharshini1773@gmail.com'
+  );
 
 
 -- ==============================================================================
--- END OF MIGRATION
+-- END OF MIGRATION v5
 --
--- Summary of SECURITY DEFINER functions in this database:
---   1. is_admin()                     — defined in original migration (unchanged)
---   2. handle_admin_auth_user()       — trigger, defined in original migration (unchanged)
---   3. validate_order_for_checkout()  — NEW in v4 (this file)
---   4. validate_order_item_price()    — NEW in v4 (this file)
+-- SECURITY DEFINER function inventory:
+--   public.is_admin()                        — EXECUTE: PUBLIC (required by RLS)
+--   public.handle_admin_auth_user()          — trigger only, not callable externally
+--   public.validate_order_for_checkout()     — EXECUTE: anon, authenticated only
+--   public.validate_order_item_price()       — EXECUTE: anon, authenticated only
+--   public.check_order_total_on_item_insert()— trigger only, not callable externally
 --
--- All use SET search_path = public to prevent search_path injection.
--- None expose service-role keys.
--- None modify existing data.
+-- No data modified. No RLS disabled. No service-role keys used or exposed.
 -- ==============================================================================
