@@ -1477,15 +1477,16 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
       console.warn("Firestore addOffer fallback:", e);
     }
 
-    // Supabase sync
+    // Supabase sync — map app Offer fields → DB column names
     sbUpsertOffer({
       id: newOffer.id,
       title: newOffer.title,
-      description: newOffer.description ?? "",
+      description: newOffer.bannerText ?? "",
       discount_percentage: newOffer.discountPercentage ?? 0,
-      coupon_code: newOffer.couponCode ?? "",
+      coupon_code: newOffer.code ?? null,
+      banner_text: newOffer.bannerText ?? null,
       start_date: newOffer.startDate ?? null,
-      expiry_date: newOffer.expiryDate ?? null,
+      expiry_date: newOffer.endDate ?? null,
       is_active: newOffer.isActive ?? true,
     } as any).catch(() => {});
 
@@ -1505,13 +1506,14 @@ export function BakeryStoreProvider({ children }: { children: ReactNode }) {
 
     // Supabase sync — map app field names to DB column names
     const sbUpdates: Record<string, any> = {};
-    if (updates.title !== undefined) sbUpdates.title = updates.title;
-    if (updates.description !== undefined) sbUpdates.description = updates.description;
-    if (updates.discountPercentage !== undefined) sbUpdates.discount_percentage = updates.discountPercentage;
-    if (updates.couponCode !== undefined) sbUpdates.coupon_code = updates.couponCode;
-    if (updates.startDate !== undefined) sbUpdates.start_date = updates.startDate;
-    if (updates.expiryDate !== undefined) sbUpdates.expiry_date = updates.expiryDate;
-    if (updates.isActive !== undefined) sbUpdates.is_active = updates.isActive;
+    if (updates.title !== undefined) sbUpdates["title"] = updates.title;
+    if (updates.bannerText !== undefined) sbUpdates["description"] = updates.bannerText;
+    if (updates.bannerText !== undefined) sbUpdates["banner_text"] = updates.bannerText;
+    if (updates.discountPercentage !== undefined) sbUpdates["discount_percentage"] = updates.discountPercentage;
+    if (updates.code !== undefined) sbUpdates["coupon_code"] = updates.code;
+    if (updates.startDate !== undefined) sbUpdates["start_date"] = updates.startDate;
+    if (updates.endDate !== undefined) sbUpdates["expiry_date"] = updates.endDate;
+    if (updates.isActive !== undefined) sbUpdates["is_active"] = updates.isActive;
     if (Object.keys(sbUpdates).length > 0) {
       sbUpdateOffer(id, sbUpdates).catch(() => {});
     }
