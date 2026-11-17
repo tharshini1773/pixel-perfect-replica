@@ -270,7 +270,7 @@ export function AdminLayout({ children, title, subtitle, action }: AdminLayoutPr
 
             <div>
               <div className="flex items-center gap-2 text-xs font-semibold text-[#8C7A70]">
-                <span>Admin</span>
+                <span>Welcome, <span className="font-bold text-rose">Tharshini!</span></span>
                 <ChevronRight className="h-3 w-3" />
                 <span className="text-rose font-bold">{title}</span>
               </div>

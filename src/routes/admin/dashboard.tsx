@@ -26,6 +26,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useBakeryStore } from "@/context/BakeryStoreContext";
 import { Logo } from "@/components/site/Logo";
 import { Button } from "@/components/ui/button";
+import { AdminHeader } from "@/components/admin/AdminHeader";
 import { pageMeta } from "@/lib/seo";
 
 // Dashboard Tab Components
@@ -250,68 +251,14 @@ function AdminDashboardPage() {
       {/* Main Content View */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top Header Bar */}
-        <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-[#EFE4DB] bg-white/95 px-4 sm:px-8 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            {/* Mobile Hamburger */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="rounded-xl border border-[#EFE4DB] p-2 text-[#5C4D44] hover:bg-[#FAF7F2] lg:hidden"
-            >
-              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </button>
-
-            <div className="flex items-center gap-2">
-              <div className="hidden xs:flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Cloud Firestore</span>
-              </div>
-              <span className="hidden sm:inline-block text-xs font-semibold text-[#8C7A70]">
-                Project: <code className="font-mono text-rose">tharshini-website</code>
-              </span>
-            </div>
-          </div>
-
-          {/* Header Actions */}
-          <div className="flex items-center gap-3">
-            {/* Notifications Shortcut */}
-            <button
-              onClick={() => switchTab("notifications")}
-              className="relative rounded-2xl border border-[#EFE4DB] p-2.5 text-[#5C4D44] hover:bg-[#FAF7F2] transition-colors"
-              title="Notifications"
-            >
-              <Bell className="h-4 w-4" />
-              {unreadNotifsCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose text-[0.6rem] font-bold text-white">
-                  {unreadNotifsCount}
-                </span>
-              )}
-            </button>
-
-            {/* View Customer Website Button */}
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="hidden sm:inline-flex gap-1.5 border-[#EFE4DB] text-xs font-bold hover:bg-cream"
-            >
-              <Link to="/" target="_blank">
-                <span>View Customer Website</span>
-                <ExternalLink className="h-3.5 w-3.5 text-[#8C7A70]" />
-              </Link>
-            </Button>
-
-            {/* Sign Out Button */}
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              size="sm"
-              className="gap-1.5 border-rose/30 text-xs font-bold text-rose hover:bg-rose/10 shadow-sm"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              <span className="hidden xs:inline">Sign Out</span>
-            </Button>
-          </div>
-        </header>
+        <AdminHeader
+          mobileMenuOpen={mobileMenuOpen}
+          onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
+          unreadNotifsCount={unreadNotifsCount}
+          onNotificationsClick={() => switchTab("notifications")}
+          onLogout={handleLogout}
+          userName="Tharshini"
+        />
 
         {/* Mobile Sidebar Dropdown */}
         {mobileMenuOpen && (
