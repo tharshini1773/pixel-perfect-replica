@@ -276,15 +276,11 @@ export async function createOrderInSupabase(
       }
     }
 
-    // 4. Record Payment
-    await (supabase.from("payments").insert({
-      id: crypto.randomUUID(),
-      order_id: payload.id,
-      payment_method: payload.paymentMethod ?? "UPI / Online",
-      amount: payload.totalAmount,
-      payment_status: "paid",
-      created_at: now,
-    }) as any);
+    // Payment record is intentionally NOT inserted here.
+    // Per secure payment flow: orders are placed with payment_status = 'pending'.
+    // The admin verifies payment receipt manually and marks the order as 'paid'
+    // in the dashboard — which triggers sbUpdateOrderPaymentStatus().
+    // The payments table RLS blocks all public INSERT; only admin can write payments.
 
     return order as DbOrder;
   } catch (err: any) {
@@ -317,6 +313,7 @@ export async function updateOrderPaymentStatus(
   paymentStatus: DbOrder["payment_status"],
 ): Promise<boolean> {
   try {
+    // 1. Update the order's payment_status
     const { error } = await (supabase
       .from("orders")
       .update({ payment_status: paymentStatus, updated_at: new Date().toISOString() })
@@ -325,10 +322,51 @@ export async function updateOrderPaymentStatus(
       if (!isTableMissing(error)) console.warn("[Supabase] updateOrderPaymentStatus:", error.message);
       return false;
     }
-    await (supabase
-      .from("payments")
-      .update({ payment_status: paymentStatus })
-      .eq("order_id", orderId) as any);
+
+    // 2. When admin marks order as 'paid', create the authoritative payment record.
+    //    This runs with the admin's authenticated session, so the payments RLS allows it.
+    if (paymentStatus === "paid") {
+      // Fetch order details to build the payment record
+      const { data: order } = await (supabase
+        .from("orders")
+        .select("total_amount, payment_method")
+        .eq("id", orderId)
+        .single() as any);
+
+      if (order) {
+        // Check if a payment record already exists for this order
+        const { data: existing } = await (supabase
+          .from("payments")
+          .select("id")
+          .eq("order_id", orderId)
+          .single() as any);
+
+        if (existing) {
+          // Update existing payment record
+          await (supabase
+            .from("payments")
+            .update({ payment_status: "paid" })
+            .eq("order_id", orderId) as any);
+        } else {
+          // Insert authoritative payment record (admin-only, authenticated session)
+          await (supabase.from("payments").insert({
+            id: crypto.randomUUID(),
+            order_id: orderId,
+            payment_method: order.payment_method ?? "UPI / Online",
+            amount: order.total_amount,
+            payment_status: "paid",
+            created_at: new Date().toISOString(),
+          }) as any);
+        }
+      }
+    } else {
+      // For non-paid statuses (refunded, failed), update existing payment record if present
+      await (supabase
+        .from("payments")
+        .update({ payment_status: paymentStatus })
+        .eq("order_id", orderId) as any);
+    }
+
     return true;
   } catch {
     return false;
