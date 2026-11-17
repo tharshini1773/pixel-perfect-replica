@@ -1,19 +1,35 @@
 -- ==============================================================================
--- Sweet Crumbs Bakery — RLS Policy Fix (v3 — Production-Safe)
+-- Sweet Crumbs Bakery — RLS Policy Fix (v4 — Production-Safe)
 -- Reviewed and corrected: 2026-11-17
 --
--- Changes from v2:
---   - Orders:      Public INSERT now enforces payment_status='pending',
---                  order_status IN ('new','pending'), total_amount > 0
---   - Order items: Public INSERT now validates unit_price matches product table,
---                  enforces subtotal = quantity * unit_price, qty > 0
---   - Payments:    Public INSERT REMOVED — payment records are admin-only.
---                  Trusting frontend payment-success messages is a security hole.
---   - Customers:   Public INSERT restricted to safe fields only (no total_orders,
---                  no total_spent inflation)
---   - All tables:  RLS re-asserted; old conflicting policies explicitly dropped.
+-- Changes from v3:
+--   1. ORDER ITEMS SUBQUERY FIX:
+--      The v3 order_items INSERT WITH CHECK queried public.orders, but
+--      anonymous users have NO SELECT on orders → subquery always fails
+--      under RLS → checkout is broken.
+--      Fix: New SECURITY DEFINER function validate_order_for_checkout()
+--      that bypasses RLS internally to check the parent order exists.
+--
+--   2. PRODUCT_ID IS NULL BYPASS REMOVED:
+--      All cakes (including "customised" category) are catalogue products
+--      with known product IDs and prices in the products table.
+--      product_id IS NOT NULL is now REQUIRED for all order items.
+--      This closes the price-validation bypass.
+--
+--   3. STALE POLICY CLEANUP:
+--      Now drops ALL policies on ALL 7 tables — including the 4 original
+--      products policies and all v3-named policies — before recreating.
+--      This prevents "permissive policy stacking" if the migration is
+--      re-run or if old policies with different names still exist.
+--
+--   4. PRICE VALIDATION HELPER:
+--      New SECURITY DEFINER function validate_order_item_price() for
+--      consistent, safe price checking (future-proof even if products
+--      SELECT policy changes).
 --
 -- Does NOT modify any existing data or schema.
+-- Does NOT disable RLS.
+-- Does NOT expose service-role keys.
 -- Safe to run multiple times (DROP IF EXISTS before each CREATE).
 -- ==============================================================================
 
@@ -31,44 +47,145 @@ ALTER TABLE public.admin_profiles ENABLE ROW LEVEL SECURITY;
 
 
 -- ==============================================================================
--- STEP 2: Drop ALL existing policies on the 5 affected tables.
+-- STEP 2: Drop ALL existing policies on ALL 7 tables.
+--
 -- This prevents "permissive policy stacking" where an old insecure policy
 -- still grants access alongside the new secure one.
--- (products and admin_profiles left in STEP 3 for explicit handling)
+--
+-- We drop BOTH the original policy names (from 20261117_complete migration)
+-- AND the v3 policy names (from previous fix runs) to cover all cases.
 -- ==============================================================================
 
--- Drop all old customers policies
-DROP POLICY IF EXISTS "Public can insert customers on checkout"    ON public.customers;
-DROP POLICY IF EXISTS "Admins can view and manage all customers"   ON public.customers;
+-- ---- PRODUCTS (original migration names) ----
+DROP POLICY IF EXISTS "Public can view available products"             ON public.products;
+DROP POLICY IF EXISTS "Admins can insert products"                     ON public.products;
+DROP POLICY IF EXISTS "Admins can update products"                     ON public.products;
+DROP POLICY IF EXISTS "Admins can delete products"                     ON public.products;
 
--- Drop all old orders policies
-DROP POLICY IF EXISTS "Customers can submit orders"                ON public.orders;
-DROP POLICY IF EXISTS "Admins can view and manage all orders"      ON public.orders;
+-- ---- CUSTOMERS ----
+DROP POLICY IF EXISTS "Public can insert customers on checkout"        ON public.customers;
+DROP POLICY IF EXISTS "Admins can view and manage all customers"       ON public.customers;
+-- v3 names
+DROP POLICY IF EXISTS "Public can register as customer at checkout"    ON public.customers;
 
--- Drop all old order_items policies
-DROP POLICY IF EXISTS "Public can insert order items"              ON public.order_items;
-DROP POLICY IF EXISTS "Admins can view and manage order items"     ON public.order_items;
+-- ---- ORDERS ----
+DROP POLICY IF EXISTS "Customers can submit orders"                    ON public.orders;
+DROP POLICY IF EXISTS "Admins can view and manage all orders"          ON public.orders;
+-- v3 names
+DROP POLICY IF EXISTS "Customers can submit new orders"                ON public.orders;
 
--- Drop all old payments policies
-DROP POLICY IF EXISTS "Public can record payments on checkout"     ON public.payments;
-DROP POLICY IF EXISTS "Admins can view and manage payments"        ON public.payments;
+-- ---- ORDER ITEMS ----
+DROP POLICY IF EXISTS "Public can insert order items"                  ON public.order_items;
+DROP POLICY IF EXISTS "Admins can view and manage order items"         ON public.order_items;
+-- v3 names
+DROP POLICY IF EXISTS "Customers can insert order items at checkout"   ON public.order_items;
 
--- Drop all old offers policies
-DROP POLICY IF EXISTS "Public can view active offers"              ON public.offers;
-DROP POLICY IF EXISTS "Admins can manage offers"                   ON public.offers;
+-- ---- PAYMENTS ----
+DROP POLICY IF EXISTS "Public can record payments on checkout"         ON public.payments;
+DROP POLICY IF EXISTS "Admins can view and manage payments"            ON public.payments;
 
--- Drop all old admin_profiles policies
-DROP POLICY IF EXISTS "Admins can view admin profiles"             ON public.admin_profiles;
-DROP POLICY IF EXISTS "Super admin can manage admin profiles"      ON public.admin_profiles;
+-- ---- OFFERS ----
+DROP POLICY IF EXISTS "Public can view active offers"                  ON public.offers;
+DROP POLICY IF EXISTS "Admins can manage offers"                       ON public.offers;
+-- v3 names
+DROP POLICY IF EXISTS "Public can view active offers only"             ON public.offers;
+DROP POLICY IF EXISTS "Admins can manage all offers"                   ON public.offers;
+
+-- ---- ADMIN PROFILES ----
+DROP POLICY IF EXISTS "Admins can view admin profiles"                 ON public.admin_profiles;
+DROP POLICY IF EXISTS "Super admin can manage admin profiles"          ON public.admin_profiles;
+-- v3 names
+DROP POLICY IF EXISTS "Authenticated users can view their own admin profile" ON public.admin_profiles;
+DROP POLICY IF EXISTS "Admins can view all admin profiles"             ON public.admin_profiles;
+DROP POLICY IF EXISTS "Super admin can fully manage admin profiles"    ON public.admin_profiles;
 
 
 -- ==============================================================================
--- TABLE 1: PRODUCTS — Unchanged from original (already correct)
+-- STEP 3: SECURITY DEFINER helper functions
+--
+-- These run with the FUNCTION OWNER's privileges (bypassing RLS internally)
+-- so that WITH CHECK clauses in public INSERT policies can safely validate
+-- data across tables that anonymous users cannot SELECT.
+--
+-- Both use:
+--   SECURITY DEFINER  — executes with owner (postgres) privileges
+--   SET search_path = public  — prevents search_path injection attacks
+--   STABLE  — does not modify data, can be optimised by planner
+-- ==============================================================================
+
+-- validate_order_for_checkout():
+--   Returns TRUE only if the given order_id exists AND is in a
+--   customer-submittable state (order_status = new/pending, payment pending).
+--   Used by the order_items INSERT policy to verify the parent order
+--   WITHOUT requiring a public SELECT policy on the orders table.
+CREATE OR REPLACE FUNCTION public.validate_order_for_checkout(p_order_id TEXT)
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.orders
+    WHERE id = p_order_id
+      AND order_status IN ('new', 'pending')
+      AND payment_status = 'pending'
+  );
+$$;
+
+-- validate_order_item_price():
+--   Returns TRUE only if the product exists, is available, and the
+--   submitted unit_price matches the actual catalogue price (within ₹0.01).
+--   Used by the order_items INSERT policy for tamper-proof price validation.
+--   Although products currently has a public SELECT policy, using a
+--   SECURITY DEFINER function here future-proofs against policy changes.
+CREATE OR REPLACE FUNCTION public.validate_order_item_price(
+  p_product_id TEXT,
+  p_unit_price NUMERIC
+)
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.products
+    WHERE id = p_product_id
+      AND availability = true
+      AND abs(price - p_unit_price) < 0.01
+  );
+$$;
+
+
+-- ==============================================================================
+-- TABLE 1: PRODUCTS
+--
 -- Public:  SELECT all products (browse the cake catalogue)
 -- Admin:   INSERT / UPDATE / DELETE (manage the product menu)
+--
+-- These are the same as the original migration — confirmed correct.
+-- Recreated here to ensure clean state after DROP above.
 -- ==============================================================================
--- (These were already correct in the original migration — not modified.)
--- Listed here only for reference; policies already exist on the live database.
+
+CREATE POLICY "Public can view available products" ON public.products
+  FOR SELECT
+  USING (true);
+
+CREATE POLICY "Admins can insert products" ON public.products
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admins can update products" ON public.products
+  FOR UPDATE
+  TO authenticated
+  USING (public.is_admin());
+
+CREATE POLICY "Admins can delete products" ON public.products
+  FOR DELETE
+  TO authenticated
+  USING (public.is_admin());
 
 
 -- ==============================================================================
@@ -77,7 +194,10 @@ DROP POLICY IF EXISTS "Super admin can manage admin profiles"      ON public.adm
 -- Public INSERT (checkout):
 --   Allowed, but WITH CHECK prevents:
 --   - Setting total_orders or total_spent (manipulation of loyalty metrics)
---   - Requires phone is not empty (minimum data integrity)
+--   - Requires name and phone are not empty (minimum data integrity)
+--
+-- Public has NO SELECT / UPDATE / DELETE on customers.
+--   → Customer names, phone numbers, addresses are protected.
 --
 -- Admin ALL:
 --   Full CRUD — only authenticated admin verified by is_admin()
@@ -111,6 +231,9 @@ CREATE POLICY "Admins can view and manage all customers" ON public.customers
 --   - total_amount must be > 0
 --   - customer_name and phone are required
 --
+-- Public has NO SELECT / UPDATE / DELETE on orders.
+--   → Existing order data, customer details, addresses are protected.
+--
 -- Admin ALL:
 --   Full CRUD — only authenticated admin
 -- ==============================================================================
@@ -141,13 +264,18 @@ CREATE POLICY "Admins can view and manage all orders" ON public.orders
 -- Public INSERT (checkout):
 --   Allowed, but WITH CHECK enforces:
 --   - quantity must be >= 1
---   - unit_price must match the actual product price in the products table
---     (prevents customers from sending unit_price = 1 for a ₹850 cake)
---   - subtotal must equal quantity * unit_price exactly
---     (prevents total manipulation)
---   - The parent order_id must exist AND be in 'new'/'pending' status
---     (prevents inserting items into orders that have already been confirmed)
---   - If product_id is supplied, it must exist and be available
+--   - unit_price must be positive
+--   - subtotal must equal quantity × unit_price exactly (no rounding tricks)
+--   - product_id IS NOT NULL — all cakes (including "customised" category)
+--     are catalogue products with known IDs and prices
+--   - Price validation via validate_order_item_price() — the submitted
+--     unit_price must match the actual product price (within ₹0.01)
+--   - Parent order validation via validate_order_for_checkout() — the
+--     parent order must exist and be in 'new'/'pending' status with
+--     payment_status = 'pending'. Uses SECURITY DEFINER to bypass RLS
+--     on the orders table (anonymous users have no SELECT on orders).
+--
+-- Public has NO SELECT / UPDATE / DELETE on order_items.
 --
 -- Admin ALL:
 --   Full CRUD — only authenticated admin
@@ -158,28 +286,18 @@ CREATE POLICY "Customers can insert order items at checkout" ON public.order_ite
   WITH CHECK (
     -- Quantity must be at least 1
     quantity >= 1
-    -- Subtotal must equal quantity × unit_price (no rounding tricks)
-    AND subtotal = quantity * unit_price
     -- unit_price must be positive
     AND unit_price > 0
-    -- The parent order must exist and still be in a customer-submittable state
-    AND EXISTS (
-      SELECT 1 FROM public.orders o
-      WHERE o.id = order_id
-        AND o.order_status IN ('new', 'pending')
-        AND o.payment_status = 'pending'
-    )
-    -- If a product_id is supplied, verify it exists and is available
-    AND (
-      product_id IS NULL
-      OR EXISTS (
-        SELECT 1 FROM public.products p
-        WHERE p.id = product_id
-          AND p.availability = true
-          -- Validate the price matches the actual product price (within ₹0.01 tolerance)
-          AND abs(p.price - unit_price) < 0.01
-      )
-    )
+    -- Subtotal must equal quantity × unit_price (no rounding tricks)
+    AND subtotal = quantity * unit_price
+    -- product_id is REQUIRED — all cakes including custom are catalogue products
+    AND product_id IS NOT NULL
+    -- Validate the price matches the actual product catalogue price
+    -- Uses SECURITY DEFINER function (safe even if products policy changes)
+    AND public.validate_order_item_price(product_id, unit_price)
+    -- The parent order must exist and be in a submittable state
+    -- Uses SECURITY DEFINER function to bypass RLS on orders table
+    AND public.validate_order_for_checkout(order_id)
   );
 
 CREATE POLICY "Admins can view and manage order items" ON public.order_items
@@ -196,7 +314,7 @@ CREATE POLICY "Admins can view and manage order items" ON public.order_items
 --
 -- Reason: Allowing anonymous users to INSERT into the payments table with
 -- payment_status = 'paid' or amount = 1 is equivalent to trusting a
--- frontend "payment success" message — which is a critical security vulnerability.
+-- frontend "payment success" message — which is a critical security hole.
 --
 -- Sweet Crumbs Bakery workflow:
 --   1. Customer places order → order saved with payment_status = 'pending'
@@ -221,11 +339,9 @@ CREATE POLICY "Admins can view and manage payments" ON public.payments
 -- Public SELECT:
 --   Active offers only (is_active = true)
 --   Inactive/expired/draft offers are NOT visible to public
---   is_admin() returns FALSE for anon users (auth.uid() is NULL), so the
---   OR clause only helps authenticated admins see all offers via the same policy
 --
 -- Admin ALL:
---   Full CRUD via second policy — manage all offers including inactive ones
+--   Full CRUD — manage all offers including inactive ones
 -- ==============================================================================
 
 CREATE POLICY "Public can view active offers only" ON public.offers
@@ -254,10 +370,6 @@ CREATE POLICY "Admins can manage all offers" ON public.offers
 -- Tharshini only (JWT email check):
 --   Full CRUD — the only person who can create, update, or delete admin accounts
 --   Prevents privilege escalation: no other user can promote themselves to admin
---
--- Note: WITH CHECK on the FOR ALL policy = Tharshini can only INSERT rows where
--- the JWT email matches — she cannot insert a row on behalf of another user
--- without that user's JWT, which is correct.
 -- ==============================================================================
 
 CREATE POLICY "Authenticated users can view their own admin profile" ON public.admin_profiles
@@ -275,3 +387,18 @@ CREATE POLICY "Super admin can fully manage admin profiles" ON public.admin_prof
   TO authenticated
   USING  (auth.jwt() ->> 'email' = 'tharshini1773@gmail.com')
   WITH CHECK (auth.jwt() ->> 'email' = 'tharshini1773@gmail.com');
+
+
+-- ==============================================================================
+-- END OF MIGRATION
+--
+-- Summary of SECURITY DEFINER functions in this database:
+--   1. is_admin()                     — defined in original migration (unchanged)
+--   2. handle_admin_auth_user()       — trigger, defined in original migration (unchanged)
+--   3. validate_order_for_checkout()  — NEW in v4 (this file)
+--   4. validate_order_item_price()    — NEW in v4 (this file)
+--
+-- All use SET search_path = public to prevent search_path injection.
+-- None expose service-role keys.
+-- None modify existing data.
+-- ==============================================================================

@@ -262,19 +262,26 @@ export async function createOrderInSupabase(
     }
 
     // 3. Insert Order Items
+    //    product_id is REQUIRED by RLS v4 (all cakes are catalogue products).
+    //    Items without a valid productId are skipped to avoid RLS rejection.
     if (payload.items.length > 0) {
-      const items: DbOrderItem[] = payload.items.map((it) => ({
-        id: it.id ?? crypto.randomUUID(),
-        order_id: payload.id,
-        product_id: it.productId ?? null,
-        product_name: it.productName,
-        quantity: it.quantity,
-        unit_price: it.price,
-        subtotal: it.total,
-      }));
-      const { error: itemsErr } = await (supabase.from("order_items").insert(items) as any);
-      if (itemsErr && !isTableMissing(itemsErr)) {
-        console.warn("[Supabase] insertOrderItems:", itemsErr.message);
+      const validItems = payload.items.filter((it) => it.productId);
+      if (validItems.length === 0) {
+        console.warn("[Supabase] insertOrderItems: no items with valid productId — skipping");
+      } else {
+        const items: DbOrderItem[] = validItems.map((it) => ({
+          id: it.id ?? crypto.randomUUID(),
+          order_id: payload.id,
+          product_id: it.productId!,
+          product_name: it.productName,
+          quantity: it.quantity,
+          unit_price: it.price,
+          subtotal: it.quantity * it.price,  // Ensure subtotal = quantity × price (RLS check)
+        }));
+        const { error: itemsErr } = await (supabase.from("order_items").insert(items) as any);
+        if (itemsErr && !isTableMissing(itemsErr)) {
+          console.warn("[Supabase] insertOrderItems:", itemsErr.message);
+        }
       }
     }
 
