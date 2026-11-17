@@ -211,87 +211,77 @@ export interface CreateOrderPayload {
 export async function createOrderInSupabase(
   payload: CreateOrderPayload,
 ): Promise<DbOrder | null> {
-  const now = new Date().toISOString();
-
   try {
-    // 1. Upsert customer — INSERT with zero counters (RLS enforces this),
-    //    then UPDATE counters separately (admin policy handles that path
-    //    when admin is signed in; otherwise counters stay at zero until admin sync)
-    await (supabase
-      .from("customers")
-      .upsert(
-        {
-          id: `cust-${payload.customerPhone.slice(-6)}`,
-          name: payload.customerName,
-          email: payload.customerEmail ?? null,
-          phone: payload.customerPhone,
-          address: payload.deliveryAddress ?? null,
-          total_orders: 0,
-          total_spent: 0,
-        },
-        { onConflict: "phone", ignoreDuplicates: true },   // keep existing counters
-      )
-      .select("id")
-      .single() as any);
-
-    // 2. Insert Order
-    const { data: order, error: ordErr } = await (supabase
-      .from("orders")
-      .insert({
-        id: payload.id,
-        customer_name: payload.customerName,
-        customer_email: payload.customerEmail ?? null,
-        phone: payload.customerPhone,
-        delivery_address: payload.deliveryAddress ?? null,
-        delivery_date: payload.deliveryDate ?? null,
-        cake_message: payload.cakeMessage ?? null,
-        notes: payload.notes ?? null,
-        total_amount: payload.totalAmount,
-        payment_status: "pending",
-        order_status: "new",
-        payment_method: payload.paymentMethod ?? "UPI / Online",
-        created_at: now,
-        updated_at: now,
-      })
-      .select()
-      .single() as any);
-
-    if (ordErr) {
-      if (!isTableMissing(ordErr)) console.warn("[Supabase] createOrder:", ordErr.message);
+    // ── RLS v6: Use submit_checkout() RPC ────────────────────────────────────
+    // This PostgreSQL RPC runs as SECURITY DEFINER (server-side) and:
+    //   1. Validates every item price against the catalogue
+    //   2. Validates SUM(subtotals) == declared total_amount (±₹0.01)
+    //   3. Generates a collision-resistant order ID server-side
+    //   4. Inserts customer, order, and order_items atomically
+    //   5. Returns the generated order ID
+    //
+    // The old 3-step (upsert customer → insert order → insert items) flow
+    // is REPLACED by this single RPC call. No direct table INSERT is needed.
+    const validItems = payload.items.filter((it) => it.productId);
+    if (validItems.length === 0) {
+      console.warn("[Supabase] createOrderInSupabase: no items with valid productId — aborting");
       return null;
     }
 
-    // 3. Insert Order Items
-    //    product_id is REQUIRED by RLS v4 (all cakes are catalogue products).
-    //    Items without a valid productId are skipped to avoid RLS rejection.
-    if (payload.items.length > 0) {
-      const validItems = payload.items.filter((it) => it.productId);
-      if (validItems.length === 0) {
-        console.warn("[Supabase] insertOrderItems: no items with valid productId — skipping");
-      } else {
-        const items: DbOrderItem[] = validItems.map((it) => ({
-          id: it.id ?? crypto.randomUUID(),
-          order_id: payload.id,
-          product_id: it.productId!,
-          product_name: it.productName,
-          quantity: it.quantity,
-          unit_price: it.price,
-          subtotal: it.quantity * it.price,  // Ensure subtotal = quantity × price (RLS check)
-        }));
-        const { error: itemsErr } = await (supabase.from("order_items").insert(items) as any);
-        if (itemsErr && !isTableMissing(itemsErr)) {
-          console.warn("[Supabase] insertOrderItems:", itemsErr.message);
-        }
+    const rpcPayload = {
+      p_customer_name:    payload.customerName,
+      p_customer_email:   payload.customerEmail ?? null,
+      p_customer_phone:   payload.customerPhone,
+      p_delivery_address: payload.deliveryAddress ?? null,
+      p_delivery_date:    payload.deliveryDate ?? null,
+      p_cake_message:     payload.cakeMessage ?? null,
+      p_notes:            payload.notes ?? null,
+      p_total_amount:     payload.totalAmount,
+      p_payment_method:   payload.paymentMethod ?? "UPI / Online",
+      p_items: validItems.map((it) => ({
+        product_id:   it.productId!,
+        product_name: it.productName,
+        quantity:     it.quantity,
+        unit_price:   it.price,
+        subtotal:     it.quantity * it.price,
+      })),
+    };
+
+    const { data: generatedOrderId, error: rpcErr } = await (
+      supabase.rpc("submit_checkout", rpcPayload) as any
+    );
+
+    if (rpcErr) {
+      if (!isTableMissing(rpcErr)) {
+        console.warn("[Supabase] submit_checkout RPC error:", rpcErr.message);
       }
+      return null;
     }
 
-    // Payment record is intentionally NOT inserted here.
-    // Per secure payment flow: orders are placed with payment_status = 'pending'.
-    // The admin verifies payment receipt manually and marks the order as 'paid'
-    // in the dashboard — which triggers sbUpdateOrderPaymentStatus().
-    // The payments table RLS blocks all public INSERT; only admin can write payments.
+    // The RPC returns the server-generated order ID (TEXT).
+    // Build a minimal DbOrder object so the caller gets the confirmed ID.
+    // The full order can be fetched by admin via fetchOrderById() later.
+    const serverOrderId = generatedOrderId as string;
+    return {
+      id:             serverOrderId,
+      customer_name:  payload.customerName,
+      customer_email: payload.customerEmail ?? null,
+      phone:          payload.customerPhone,
+      total_amount:   payload.totalAmount,
+      payment_status: "pending",
+      order_status:   "new",
+      payment_method: payload.paymentMethod ?? "UPI / Online",
+      delivery_address: payload.deliveryAddress ?? null,
+      delivery_date:  payload.deliveryDate ?? null,
+      cake_message:   payload.cakeMessage ?? null,
+      notes:          payload.notes ?? null,
+    } as DbOrder;
 
-    return order as DbOrder;
+    // Payment record is intentionally NOT inserted here.
+    // Secure flow: order is created with payment_status='pending'.
+    // Admin verifies the UPI/bank receipt and marks the order as 'paid'
+    // via updateOrderPaymentStatus(), which creates the payment record.
+    // The payments table RLS blocks all public INSERT.
   } catch (err: any) {
     console.warn("[Supabase] createOrderInSupabase exception:", err?.message);
     return null;

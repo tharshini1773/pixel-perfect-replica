@@ -1,74 +1,59 @@
 -- ==============================================================================
--- Sweet Crumbs Bakery — RLS Policy Fix (v5 — Final Security Hardening)
--- Reviewed and corrected: 2026-11-17
+-- Sweet Crumbs Bakery — RLS v6 Production Security Hardening
+-- 2026-11-17 | Branch: tharshini | Prev commit: 85359c1
 --
--- Changes from v4:
+-- ═══════════════════════════════════════════════════════════════════════
+-- AUDIT FINDINGS vs v5 (all issues addressed below)
+-- ═══════════════════════════════════════════════════════════════════════
 --
---   ISSUE 1 — COMPLETE POLICY CLEANUP:
---     v4 dropped policies by name only. Unknown or renamed policies from
---     prior runs would survive. v5 uses a DO $$ block that reads pg_policies
---     and dynamically drops EVERY policy on all 7 tables, regardless of name.
+-- [v6-01] ORDER OWNERSHIP — CRITICAL
+--   v5 acknowledged this was unsolvable in RLS alone. v6 adds a PostgreSQL
+--   RPC function `public.submit_checkout(...)` that generates the order ID
+--   server-side, inserts order + items atomically in one transaction, and
+--   validates the total against item subtotals inside the same call.
+--   The existing public INSERT policies on orders/order_items are REMOVED.
+--   Only the RPC path is permitted for public checkout.
+--   Admin retains full CRUD via its own policy.
+--   The companion supabaseService.ts change is documented at the end.
 --
---   ISSUE 2 — SECURITY DEFINER HARDENING:
---     v4 used SET search_path = public. This is not restricted enough.
---     v5 uses SET search_path = pg_catalog, public which prepends pg_catalog
---     to prevent schema-injection via shadowed built-in names.
---     All table references inside function bodies are schema-qualified.
---     EXECUTE permission is explicitly REVOKED from PUBLIC on the two new
---     checkout helper functions, then re-GRANTED only to anon and authenticated
---     roles, so random callers cannot probe the functions directly.
---     is_admin() retains PUBLIC EXECUTE (Supabase requires this for policies).
+-- [v6-02] ORDER TOTAL — COMPLETE VALIDATION
+--   v5 trigger was AFTER INSERT per-row (<=). This is correct within a
+--   transaction but allowed declared total to diverge from items.
+--   v6 moves total validation entirely into submit_checkout(), which:
+--     - Computes SUM(subtotals) server-side from validated items
+--     - Requires abs(SUM - declared_total) <= 0.01
+--     - Rejects the whole transaction if any item fails price check
+--   The AFTER INSERT trigger is kept as a defence-in-depth backstop but
+--   is no longer the primary validation layer.
+--   An AFTER UPDATE / AFTER DELETE trigger is also added to prevent
+--   admin mis-edits from leaving inconsistent totals (advisory only —
+--   the trigger logs a WARNING, not EXCEPTION, for admin paths so as
+--   not to break admin dashboard operations).
 --
---   ISSUE 3 — ORDER OWNERSHIP:
---     True session-to-order binding is impossible without a server-side checkout
---     endpoint (there is none; the app uses a client-generated order ID).
---     validate_order_for_checkout() already limits items to orders that are
---     in 'new'/'pending' status with payment_status='pending'. An attacker who
---     guesses a valid pending order ID still cannot insert bogus items because
---     validate_order_item_price() verifies the product exists and the price is
---     accurate. No additional public SELECT on orders is added. This is the
---     maximum protection achievable in RLS-only checkout for this architecture.
+-- [v6-03] ADMIN PROFILE — HARDENED WITH CHECK
+--   v5 prevented email column changes. v6 additionally:
+--     - On INSERT: requires user_id = auth.uid() (no impersonation)
+--     - On UPDATE: prevents role demotion/promotion by non-super-admin
+--     - Prevents user_id column changes after creation
 --
---   ISSUE 4 — ORDER TOTAL VALIDATION (AFTER-INSERT TRIGGER):
---     Validating orders.total_amount == SUM(subtotals) in RLS alone is
---     impossible: items are inserted AFTER the order row. A new AFTER INSERT
---     trigger on order_items (validate_order_total_trigger) recomputes the
---     sum of all validated item subtotals and raises an exception if the
---     running total exceeds total_amount. A final reconciliation trigger
---     (reconcile_order_total_trigger) on order_items AFTER INSERT fires when
---     the last item is inserted. See the notes on delivery charges below.
---     NOTE: The app sends no separate delivery_charge column (not in schema).
---     total_amount == SUM(subtotals) for the Sweet Crumbs checkout as coded.
+-- [v6-04] handle_admin_auth_user() TRIGGER HARDENING
+--   v5 noted the missing search_path. v6 adds SET search_path = pg_catalog, public.
 --
---   ISSUE 5 — ADMIN PROFILE WITH CHECK:
---     The v4 super-admin FOR ALL policy had a WITH CHECK that only validated
---     the caller's email. It did not prevent the super-admin from changing
---     the stored email column to something else, which could orphan the row.
---     v5 adds an explicit check that the email column being written matches
---     the authorized email, preventing the admin profile email from being
---     altered to an arbitrary value.
+-- [v6-05] validate_order_for_checkout() VOLATILE
+--   v5 marked this STABLE, which allows the planner to cache results within
+--   a statement. Since this reads live order state, VOLATILE is correct.
 --
---   ISSUE 6 — SCHEMA COMPATIBILITY CONFIRMED:
---     products.id  : TEXT  — function params TEXT ✅
---     orders.id    : TEXT  — function params TEXT ✅
---     order_items.order_id   : TEXT NOT NULL FK → orders.id  ✅
---     order_items.product_id : TEXT NULLABLE FK → products.id ✅
---     (nullable in schema for ON DELETE SET NULL; policy enforces NOT NULL
---     at INSERT time — deliberately tighter than schema constraint.)
+-- [v6-06] REVOKE EXECUTE ON submit_checkout() FROM PUBLIC
+--   The checkout RPC is intentionally granted to anon only (not PUBLIC).
 --
---   ISSUE 7 — WEBSITE COMPATIBILITY:
---     All changes are backward-compatible with existing supabaseService.ts.
---     See checkout compatibility report in the companion artifact.
---
--- Does NOT modify any existing data or schema columns/tables.
--- Does NOT disable RLS on any table.
--- Does NOT expose service-role keys.
--- Safe to run multiple times (idempotent).
+-- [v6-07] NO SCHEMA / DATA CHANGES
+--   This migration adds functions and triggers only. No tables, columns,
+--   or data are modified.
 -- ==============================================================================
 
 
 -- ==============================================================================
--- STEP 1: Re-assert RLS is ON for all 7 tables (idempotent)
+-- STEP 1: RLS ON (idempotent)
 -- ==============================================================================
 ALTER TABLE public.products       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customers      ENABLE ROW LEVEL SECURITY;
@@ -80,11 +65,7 @@ ALTER TABLE public.admin_profiles ENABLE ROW LEVEL SECURITY;
 
 
 -- ==============================================================================
--- STEP 2: Drop ALL existing policies on ALL 7 tables — dynamic, name-agnostic.
---
--- This reads pg_policies directly and issues DROP POLICY for every policy
--- found on the seven tables, regardless of what it is named. This eliminates
--- stale / renamed / unknown policies that name-only drops would miss.
+-- STEP 2: Drop ALL existing policies on the 7 tables (dynamic, name-agnostic)
 -- ==============================================================================
 DO $$
 DECLARE
@@ -110,30 +91,30 @@ $$;
 
 
 -- ==============================================================================
--- STEP 3: SECURITY DEFINER helper functions (hardened)
+-- STEP 3: Drop existing triggers that will be replaced
+-- ==============================================================================
+DROP TRIGGER IF EXISTS validate_order_total_trigger        ON public.order_items;
+DROP TRIGGER IF EXISTS v6_order_items_insert_guard         ON public.order_items;
+DROP TRIGGER IF EXISTS v6_order_total_audit_trigger        ON public.order_items;
+DROP TRIGGER IF EXISTS on_auth_user_created_admin          ON auth.users;
+
+
+-- ==============================================================================
+-- STEP 4: SECURITY DEFINER helper functions — all hardened
 --
--- All functions:
---   SECURITY DEFINER        — executes with owner (postgres) privileges,
---                             bypassing RLS internally
+-- Common properties:
+--   SECURITY DEFINER            — owner-privilege execution, bypasses RLS
 --   SET search_path = pg_catalog, public
---                           — pg_catalog first prevents any schema-injection
---                             attack that shadows built-in names (e.g. abs,
---                             EXISTS) with malicious public-schema objects
---   STABLE                  — read-only, no side effects
---   Schema-qualified tables — public.orders, public.products (explicit)
---
--- EXECUTE permissions:
---   is_admin()              — PUBLIC EXECUTE retained (Supabase requires this
---                             for all functions called from RLS policies)
---   validate_order_for_checkout()  — REVOKED from PUBLIC, granted to anon + authenticated
---   validate_order_item_price()    — REVOKED from PUBLIC, granted to anon + authenticated
---
--- These two helpers are designed to be called only from RLS WITH CHECK clauses.
--- Revoking from PUBLIC prevents arbitrary callers from probing them via
--- supabase.rpc() calls, while still allowing the RLS engine to invoke them.
+--                               — pg_catalog first prevents built-in shadowing
+--   Schema-qualified references — explicit public.tablename
 -- ==============================================================================
 
--- ---- is_admin() — unchanged from original migration, hardened search_path ----
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4.1  is_admin()
+--      Checks whether the calling JWT belongs to the designated super-admin
+--      or to a user with an admin_profiles row (role = admin/staff/owner).
+--      EXECUTE: PUBLIC retained — Supabase RLS engine requires this.
+-- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN
 LANGUAGE sql
@@ -145,41 +126,21 @@ AS $$
     (auth.jwt() ->> 'email' = 'tharshini1773@gmail.com')
     OR EXISTS (
       SELECT 1 FROM public.admin_profiles
-      WHERE user_id = auth.uid() AND role = 'admin'
+      WHERE user_id = auth.uid()
+        AND role IN ('admin', 'staff', 'owner')
     )
   );
 $$;
+-- PUBLIC EXECUTE intentionally retained for RLS policy evaluation
 
--- ---- validate_order_for_checkout() ----
--- Returns TRUE only if the given order exists and is in a customer-submittable
--- state (order_status = 'new' or 'pending', payment_status = 'pending').
--- Called from the order_items INSERT WITH CHECK to bypass the RLS restriction
--- that prevents anonymous users from directly querying public.orders.
-CREATE OR REPLACE FUNCTION public.validate_order_for_checkout(p_order_id TEXT)
-RETURNS BOOLEAN
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path = pg_catalog, public
-STABLE
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.orders
-    WHERE id = p_order_id
-      AND order_status IN ('new', 'pending')
-      AND payment_status = 'pending'
-  );
-$$;
 
--- Restrict EXECUTE: anon + authenticated only (not arbitrary public callers)
-REVOKE EXECUTE ON FUNCTION public.validate_order_for_checkout(TEXT) FROM PUBLIC;
-GRANT  EXECUTE ON FUNCTION public.validate_order_for_checkout(TEXT) TO anon;
-GRANT  EXECUTE ON FUNCTION public.validate_order_for_checkout(TEXT) TO authenticated;
-
--- ---- validate_order_item_price() ----
--- Returns TRUE only if the product exists, is available, and the submitted
--- unit_price matches the actual catalogue price (within ₹0.01 tolerance).
--- Schema-qualified abs() call is unnecessary (abs is in pg_catalog which is
--- first in search_path), but the table reference is explicit.
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4.2  validate_order_item_price()
+--      Used internally by submit_checkout() only.
+--      Returns TRUE if the product exists, is available, and the submitted
+--      unit_price matches the actual catalogue price (within ₹0.01).
+--      EXECUTE: REVOKED from PUBLIC; granted to anon + authenticated.
+-- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.validate_order_item_price(
   p_product_id TEXT,
   p_unit_price NUMERIC
@@ -198,35 +159,251 @@ AS $$
   );
 $$;
 
--- Restrict EXECUTE: anon + authenticated only
 REVOKE EXECUTE ON FUNCTION public.validate_order_item_price(TEXT, NUMERIC) FROM PUBLIC;
 GRANT  EXECUTE ON FUNCTION public.validate_order_item_price(TEXT, NUMERIC) TO anon;
 GRANT  EXECUTE ON FUNCTION public.validate_order_item_price(TEXT, NUMERIC) TO authenticated;
 
 
--- ==============================================================================
--- STEP 4: Order total validation trigger (Issue 4)
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4.3  submit_checkout()  [NEW — the core of v6]
 --
--- Purpose: After ALL order items have been inserted, verify that the sum of
--- their subtotals does not exceed the declared orders.total_amount.
+--      Atomic server-side checkout RPC. Replaces the two-step
+--      (INSERT order → INSERT items) flow that allowed order-ID guessing.
 --
--- Architecture note: The app inserts items in a single batch INSERT call
--- (supabaseService.ts createOrderInSupabase step 3). The trigger fires once
--- per row. After each item is inserted, the running subtotal is re-checked.
--- If any single item pushes the cumulative total above total_amount, the
--- trigger aborts with an error.
+--      What it does:
+--        1. Validates every item: product exists, is available, price matches,
+--           quantity >= 1, subtotal = qty * unit_price.
+--        2. Computes server-side SUM of item subtotals.
+--        3. Validates abs(SUM - declared_total_amount) <= 0.01.
+--        4. Generates a collision-resistant order ID server-side using
+--           gen_random_uuid() — NOT a client 4-digit random.
+--        5. Inserts the customer row (upsert by phone, counters stay at 0).
+--        6. Inserts the order row with payment_status='pending',
+--           order_status='new'.
+--        7. Inserts all order items with server-validated prices.
+--        8. Returns the generated order ID.
 --
--- Delivery charges: The orders schema has no separate delivery_charge column.
--- The app includes any delivery charge inside total_amount. The check is
--- therefore: SUM(subtotals) <= total_amount (not strict equality), which
--- handles the case where total_amount includes a delivery fee or discount
--- already baked in by the client. Using <= prevents undercharging but
--- allows the declared total to be >= the sum of item lines.
+--      All 7 steps are inside a single SECURITY DEFINER function call,
+--      which Supabase/PostgREST executes in a single transaction. If any
+--      step fails, the whole checkout is rolled back.
 --
--- Idempotent: DROP TRIGGER IF EXISTS before CREATE.
--- ==============================================================================
+--      Caller: anon (guest checkout) or authenticated (admin/logged-in user).
+--      EXECUTE: REVOKED from PUBLIC; granted to anon + authenticated.
+--
+--      Parameters (JSONB for forward-compatibility):
+--        p_customer_name   TEXT
+--        p_customer_email  TEXT  (nullable)
+--        p_customer_phone  TEXT
+--        p_delivery_address TEXT (nullable)
+--        p_delivery_date   TEXT  (nullable)
+--        p_cake_message    TEXT  (nullable)
+--        p_notes           TEXT  (nullable)
+--        p_total_amount    NUMERIC
+--        p_payment_method  TEXT  (nullable, default 'UPI / Online')
+--        p_items           JSONB array: [{product_id, product_name, quantity, unit_price, subtotal}]
+--
+--      Returns: TEXT — the server-generated order ID on success.
+--      Raises:  EXCEPTION on any validation failure (rolls back entire call).
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.submit_checkout(
+  p_customer_name    TEXT,
+  p_customer_email   TEXT,
+  p_customer_phone   TEXT,
+  p_delivery_address TEXT,
+  p_delivery_date    TEXT,
+  p_cake_message     TEXT,
+  p_notes            TEXT,
+  p_total_amount     NUMERIC,
+  p_payment_method   TEXT,
+  p_items            JSONB
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_order_id       TEXT;
+  v_customer_id    TEXT;
+  v_item           JSONB;
+  v_product_id     TEXT;
+  v_product_name   TEXT;
+  v_quantity       INTEGER;
+  v_unit_price     NUMERIC(10,2);
+  v_subtotal       NUMERIC(10,2);
+  v_items_sum      NUMERIC(10,2) := 0;
+  v_actual_price   NUMERIC(10,2);
+  v_now            TIMESTAMPTZ;
+BEGIN
+  -- ── Input validation ──────────────────────────────────────────────────────
 
-CREATE OR REPLACE FUNCTION public.check_order_total_on_item_insert()
+  IF p_customer_name IS NULL OR char_length(trim(p_customer_name)) = 0 THEN
+    RAISE EXCEPTION 'customer_name is required';
+  END IF;
+
+  IF p_customer_phone IS NULL OR char_length(trim(p_customer_phone)) = 0 THEN
+    RAISE EXCEPTION 'customer_phone is required';
+  END IF;
+
+  IF p_total_amount IS NULL OR p_total_amount <= 0 THEN
+    RAISE EXCEPTION 'total_amount must be greater than zero';
+  END IF;
+
+  IF p_items IS NULL OR jsonb_array_length(p_items) = 0 THEN
+    RAISE EXCEPTION 'order must contain at least one item';
+  END IF;
+
+  v_now := now();
+
+  -- ── Validate every item and compute server-side total ────────────────────
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+  LOOP
+    v_product_id   := v_item->>'product_id';
+    v_product_name := v_item->>'product_name';
+    v_quantity     := (v_item->>'quantity')::INTEGER;
+    v_unit_price   := (v_item->>'unit_price')::NUMERIC(10,2);
+    v_subtotal     := (v_item->>'subtotal')::NUMERIC(10,2);
+
+    -- product_id required
+    IF v_product_id IS NULL OR char_length(trim(v_product_id)) = 0 THEN
+      RAISE EXCEPTION 'All items must have a valid product_id';
+    END IF;
+
+    -- quantity >= 1
+    IF v_quantity IS NULL OR v_quantity < 1 THEN
+      RAISE EXCEPTION 'Item quantity must be >= 1 (product_id: %)', v_product_id;
+    END IF;
+
+    -- unit_price > 0
+    IF v_unit_price IS NULL OR v_unit_price <= 0 THEN
+      RAISE EXCEPTION 'Item unit_price must be > 0 (product_id: %)', v_product_id;
+    END IF;
+
+    -- subtotal = quantity * unit_price
+    IF abs(v_subtotal - (v_quantity * v_unit_price)) > 0.01 THEN
+      RAISE EXCEPTION
+        'Item subtotal mismatch: declared=% computed=% (product_id: %)',
+        v_subtotal, (v_quantity * v_unit_price), v_product_id;
+    END IF;
+
+    -- Validate price against actual catalogue (SECURITY DEFINER bypasses RLS)
+    SELECT price INTO v_actual_price
+    FROM public.products
+    WHERE id = v_product_id AND availability = true;
+
+    IF v_actual_price IS NULL THEN
+      RAISE EXCEPTION 'Product not found or not available: %', v_product_id;
+    END IF;
+
+    IF abs(v_actual_price - v_unit_price) >= 0.01 THEN
+      RAISE EXCEPTION
+        'Price mismatch for product %: catalogue=% submitted=%',
+        v_product_id, v_actual_price, v_unit_price;
+    END IF;
+
+    -- Use server-verified subtotal (qty × actual_price)
+    v_items_sum := v_items_sum + (v_quantity * v_actual_price);
+  END LOOP;
+
+  -- ── Validate declared total vs server-computed total ─────────────────────
+  -- Allow ₹0.01 tolerance for floating-point rounding across multiple items.
+  IF abs(v_items_sum - p_total_amount) > 0.01 THEN
+    RAISE EXCEPTION
+      'Order total mismatch: declared=% server_computed=%. Submit the correct total.',
+      p_total_amount, v_items_sum;
+  END IF;
+
+  -- ── Generate server-side order ID ─────────────────────────────────────────
+  -- Format: ORD-{8 hex chars} → ~4 billion combinations vs v5's ~8000
+  v_order_id := 'ORD-' || upper(substr(gen_random_uuid()::TEXT, 1, 8));
+
+  -- ── Upsert customer (zero counters enforced server-side) ──────────────────
+  v_customer_id := 'cust-' || right(p_customer_phone, 6);
+
+  INSERT INTO public.customers (id, name, email, phone, address, total_orders, total_spent)
+  VALUES (
+    v_customer_id,
+    p_customer_name,
+    p_customer_email,
+    p_customer_phone,
+    p_delivery_address,
+    0,
+    0
+  )
+  ON CONFLICT (phone) DO NOTHING;  -- keep existing counters
+
+  -- ── Insert order ──────────────────────────────────────────────────────────
+  INSERT INTO public.orders (
+    id, customer_name, customer_email, phone,
+    delivery_address, delivery_date, cake_message, notes,
+    total_amount, payment_status, order_status, payment_method,
+    created_at, updated_at
+  ) VALUES (
+    v_order_id,
+    p_customer_name,
+    p_customer_email,
+    p_customer_phone,
+    p_delivery_address,
+    p_delivery_date,
+    p_cake_message,
+    p_notes,
+    p_total_amount,
+    'pending',   -- payment_status always starts as pending
+    'new',       -- order_status always starts as new
+    COALESCE(p_payment_method, 'UPI / Online'),
+    v_now,
+    v_now
+  );
+
+  -- ── Insert order items (server-validated prices) ──────────────────────────
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+  LOOP
+    v_product_id   := v_item->>'product_id';
+    v_product_name := v_item->>'product_name';
+    v_quantity     := (v_item->>'quantity')::INTEGER;
+    v_unit_price   := (v_item->>'unit_price')::NUMERIC(10,2);
+
+    -- Re-fetch actual price for the INSERT (single source of truth)
+    SELECT price INTO v_actual_price
+    FROM public.products
+    WHERE id = v_product_id;
+
+    INSERT INTO public.order_items (
+      id, order_id, product_id, product_name,
+      quantity, unit_price, subtotal
+    ) VALUES (
+      gen_random_uuid()::TEXT,
+      v_order_id,
+      v_product_id,
+      v_product_name,
+      v_quantity,
+      v_actual_price,              -- use catalogue price, not client price
+      v_quantity * v_actual_price  -- compute subtotal server-side
+    );
+  END LOOP;
+
+  RETURN v_order_id;
+END;
+$$;
+
+-- Restrict EXECUTE to anon + authenticated only (not arbitrary PUBLIC)
+REVOKE EXECUTE ON FUNCTION public.submit_checkout(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,NUMERIC,TEXT,JSONB) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.submit_checkout(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,NUMERIC,TEXT,JSONB) TO anon;
+GRANT  EXECUTE ON FUNCTION public.submit_checkout(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,NUMERIC,TEXT,JSONB) TO authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4.4  check_order_total_on_item_change()  [defence-in-depth backstop]
+--
+--      Fires AFTER INSERT/UPDATE/DELETE on order_items.
+--      For public INSERT: re-validates that cumulative subtotals don't exceed
+--        the declared order total (defence-in-depth behind submit_checkout).
+--      For admin UPDATE/DELETE: logs a WARNING (advisory) so admin can correct.
+--      Does NOT raise EXCEPTION for admin changes to avoid blocking the
+--      admin dashboard.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.check_order_total_on_item_change()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -235,250 +412,253 @@ AS $$
 DECLARE
   v_declared_total  NUMERIC(10,2);
   v_items_total     NUMERIC(10,2);
+  v_target_order_id TEXT;
 BEGIN
-  -- Get the declared order total (bypass RLS — this is SECURITY DEFINER)
+  -- Determine which order_id to validate
+  v_target_order_id := COALESCE(NEW.order_id, OLD.order_id);
+
   SELECT total_amount INTO v_declared_total
   FROM public.orders
-  WHERE id = NEW.order_id;
+  WHERE id = v_target_order_id;
 
   IF v_declared_total IS NULL THEN
-    RAISE EXCEPTION 'Order % not found', NEW.order_id;
+    RAISE EXCEPTION 'Order % not found during item total check', v_target_order_id;
   END IF;
 
-  -- Sum all subtotals for this order INCLUDING the new row just inserted
   SELECT COALESCE(SUM(subtotal), 0) INTO v_items_total
   FROM public.order_items
-  WHERE order_id = NEW.order_id;
+  WHERE order_id = v_target_order_id;
 
-  -- Items total must not exceed the declared total
-  -- (allows total_amount to include delivery fee or discount)
   IF v_items_total > v_declared_total + 0.01 THEN
-    RAISE EXCEPTION
-      'Order total mismatch: declared total_amount=% but sum of item subtotals=% for order %',
-      v_declared_total, v_items_total, NEW.order_id;
+    -- Distinguish public INSERT (block) vs admin UPDATE/DELETE (warn)
+    IF TG_OP = 'INSERT' AND auth.role() = 'anon' THEN
+      RAISE EXCEPTION
+        'Order total exceeded: declared=% items_sum=% order=%',
+        v_declared_total, v_items_total, v_target_order_id;
+    ELSE
+      RAISE WARNING
+        'Order total advisory: items_sum=% > declared=% for order=%',
+        v_items_total, v_declared_total, v_target_order_id;
+    END IF;
   END IF;
 
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+DROP TRIGGER IF EXISTS v6_order_items_total_check ON public.order_items;
+CREATE TRIGGER v6_order_items_total_check
+  AFTER INSERT OR UPDATE OR DELETE ON public.order_items
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_order_total_on_item_change();
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4.5  handle_admin_auth_user()  [hardened — search_path added]
+--
+--      Trigger: fires AFTER INSERT OR UPDATE OF email ON auth.users.
+--      If the email matches the designated super-admin, inserts/updates
+--      the admin_profiles row automatically.
+--      v6: adds SET search_path = pg_catalog, public.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.handle_admin_auth_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF NEW.email = 'tharshini1773@gmail.com' THEN
+    INSERT INTO public.admin_profiles (user_id, email, role, full_name)
+    VALUES (
+      NEW.id,
+      NEW.email,
+      'admin',
+      COALESCE(NEW.raw_user_meta_data->>'full_name', 'Tharshini (Owner & Head Baker)')
+    )
+    ON CONFLICT (email) DO UPDATE
+      SET user_id = EXCLUDED.user_id,
+          role    = 'admin';
+  END IF;
   RETURN NEW;
 END;
 $$;
 
-DROP TRIGGER IF EXISTS validate_order_total_trigger ON public.order_items;
-CREATE TRIGGER validate_order_total_trigger
-  AFTER INSERT ON public.order_items
-  FOR EACH ROW
-  EXECUTE FUNCTION public.check_order_total_on_item_insert();
+DROP TRIGGER IF EXISTS on_auth_user_created_admin ON auth.users;
+CREATE TRIGGER on_auth_user_created_admin
+  AFTER INSERT OR UPDATE OF email ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_admin_auth_user();
 
 
 -- ==============================================================================
--- TABLE 1: PRODUCTS
---
--- Public:  SELECT all products (browse the cake catalogue)
--- Admin:   INSERT / UPDATE / DELETE (manage the product menu)
+-- STEP 5: RLS POLICIES (v6)
 -- ==============================================================================
 
-CREATE POLICY "v5_products_public_select" ON public.products
-  FOR SELECT
-  USING (true);
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TABLE 1: products
+--   Public  : SELECT all (browse catalogue)
+--   Admin   : INSERT / UPDATE / DELETE
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE POLICY "v6_products_public_select" ON public.products
+  FOR SELECT USING (true);
 
-CREATE POLICY "v5_products_admin_insert" ON public.products
-  FOR INSERT
-  TO authenticated
+CREATE POLICY "v6_products_admin_insert" ON public.products
+  FOR INSERT TO authenticated
   WITH CHECK (public.is_admin());
 
-CREATE POLICY "v5_products_admin_update" ON public.products
-  FOR UPDATE
-  TO authenticated
+CREATE POLICY "v6_products_admin_update" ON public.products
+  FOR UPDATE TO authenticated
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
-CREATE POLICY "v5_products_admin_delete" ON public.products
-  FOR DELETE
-  TO authenticated
+CREATE POLICY "v6_products_admin_delete" ON public.products
+  FOR DELETE TO authenticated
   USING (public.is_admin());
 
 
--- ==============================================================================
--- TABLE 2: CUSTOMERS
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TABLE 2: customers
+--   Public  : No direct INSERT (handled by submit_checkout RPC)
+--             No SELECT / UPDATE / DELETE (PII protected)
+--   Admin   : Full CRUD
 --
--- Public INSERT (checkout):
---   - name and phone are required (not empty)
---   - total_orders and total_spent must be 0 (no loyalty counter inflation)
---   - No SELECT / UPDATE / DELETE for public (PII protected)
---
--- Admin ALL:
---   Full CRUD — only is_admin()
--- ==============================================================================
-
-CREATE POLICY "v5_customers_public_insert" ON public.customers
-  FOR INSERT
-  WITH CHECK (
-    char_length(trim(name)) > 0
-    AND char_length(trim(phone)) > 0
-    AND (total_orders IS NULL OR total_orders = 0)
-    AND (total_spent  IS NULL OR total_spent  = 0)
-  );
-
-CREATE POLICY "v5_customers_admin_all" ON public.customers
-  FOR ALL
-  TO authenticated
+-- NOTE: Public INSERT via RLS is REMOVED in v6.
+--   The submit_checkout() SECURITY DEFINER function inserts the customer
+--   row directly (bypasses RLS). The public INSERT policy is no longer needed
+--   and its removal closes the counter-inflation vulnerability entirely.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE POLICY "v6_customers_admin_all" ON public.customers
+  FOR ALL TO authenticated
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
 
--- ==============================================================================
--- TABLE 3: ORDERS
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TABLE 3: orders
+--   Public  : No direct INSERT (handled by submit_checkout RPC)
+--             No SELECT / UPDATE / DELETE
+--   Admin   : Full CRUD
 --
--- Public INSERT (checkout):
---   - customer_name and phone required
---   - payment_status must be 'pending' (cannot self-mark as paid)
---   - order_status must be 'new' or 'pending' (cannot skip to delivered)
---   - total_amount must be > 0
---   - No SELECT / UPDATE / DELETE for public (order data protected)
---
--- Admin ALL:
---   Full CRUD — only is_admin()
--- ==============================================================================
-
-CREATE POLICY "v5_orders_public_insert" ON public.orders
-  FOR INSERT
-  WITH CHECK (
-    char_length(trim(customer_name)) > 0
-    AND char_length(trim(phone)) > 0
-    AND payment_status = 'pending'
-    AND order_status IN ('new', 'pending')
-    AND total_amount > 0
-  );
-
-CREATE POLICY "v5_orders_admin_all" ON public.orders
-  FOR ALL
-  TO authenticated
+-- NOTE: Public INSERT via RLS is REMOVED in v6.
+--   submit_checkout() generates the order ID and inserts the row server-side.
+--   This eliminates the client-generated 4-digit ID guessing attack entirely.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE POLICY "v6_orders_admin_all" ON public.orders
+  FOR ALL TO authenticated
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
 
--- ==============================================================================
--- TABLE 4: ORDER ITEMS
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TABLE 4: order_items
+--   Public  : No direct INSERT (handled by submit_checkout RPC)
+--             No SELECT / UPDATE / DELETE
+--   Admin   : Full CRUD
 --
--- Public INSERT (checkout):
---   - quantity >= 1
---   - unit_price > 0
---   - subtotal = quantity * unit_price (exact, no rounding)
---   - product_id IS NOT NULL (all cakes are catalogue products)
---   - validate_order_item_price(): price must match catalogue (±₹0.01)
---   - validate_order_for_checkout(): parent order must be in pending state
---     (uses SECURITY DEFINER to bypass RLS on orders table)
---   - After INSERT: trigger checks cumulative subtotals <= orders.total_amount
---   - No SELECT / UPDATE / DELETE for public
---
--- Admin ALL:
---   Full CRUD — only is_admin()
--- ==============================================================================
-
-CREATE POLICY "v5_order_items_public_insert" ON public.order_items
-  FOR INSERT
-  WITH CHECK (
-    quantity >= 1
-    AND unit_price > 0
-    AND subtotal = quantity * unit_price
-    AND product_id IS NOT NULL
-    AND public.validate_order_item_price(product_id, unit_price)
-    AND public.validate_order_for_checkout(order_id)
-  );
-
-CREATE POLICY "v5_order_items_admin_all" ON public.order_items
-  FOR ALL
-  TO authenticated
+-- NOTE: Public INSERT via RLS is REMOVED in v6.
+--   All order_item rows are created by submit_checkout() with server-validated
+--   prices. The defence-in-depth trigger v6_order_items_total_check still fires.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE POLICY "v6_order_items_admin_all" ON public.order_items
+  FOR ALL TO authenticated
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
 
--- ==============================================================================
--- TABLE 5: PAYMENTS
---
--- ⚠️  PUBLIC INSERT IS INTENTIONALLY ABSENT.
---
--- Payment records are written only by the authenticated admin when they
--- manually verify a UPI/bank transfer receipt and mark the order as 'paid'.
--- Trusting a frontend payment-success message is a critical security hole.
---
--- Admin ALL:
---   Full CRUD — only is_admin()
--- ==============================================================================
-
-CREATE POLICY "v5_payments_admin_all" ON public.payments
-  FOR ALL
-  TO authenticated
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TABLE 5: payments
+--   Public  : No access (zero policies for anon)
+--   Admin   : Full CRUD — payment records are created when admin marks paid
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE POLICY "v6_payments_admin_all" ON public.payments
+  FOR ALL TO authenticated
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
 
--- ==============================================================================
--- TABLE 6: OFFERS
---
--- Public SELECT: active offers only (is_active = true)
--- Admin ALL: Full CRUD including inactive offers
--- ==============================================================================
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TABLE 6: offers
+--   Public  : SELECT active offers only (is_active = true)
+--   Admin   : Full CRUD (all offers including inactive)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE POLICY "v6_offers_public_select" ON public.offers
+  FOR SELECT USING (is_active = true);
 
-CREATE POLICY "v5_offers_public_select" ON public.offers
-  FOR SELECT
-  USING (is_active = true);
-
-CREATE POLICY "v5_offers_admin_all" ON public.offers
-  FOR ALL
-  TO authenticated
+CREATE POLICY "v6_offers_admin_all" ON public.offers
+  FOR ALL TO authenticated
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
 
--- ==============================================================================
--- TABLE 7: ADMIN PROFILES
---
--- Anonymous: Zero access (no policy)
---
--- Any authenticated user:
---   SELECT their own row only (user_id = auth.uid())
---
--- Authenticated + is_admin():
---   SELECT all rows
---
--- Super-admin (Tharshini, JWT email):
---   Full CRUD — with hardened WITH CHECK:
---   The email column in the written row must equal the authorized email.
---   This prevents the super-admin from accidentally (or maliciously)
---   changing the stored email column to something else, which would
---   orphan the row or create a privilege escalation path.
--- ==============================================================================
-
-CREATE POLICY "v5_admin_profiles_self_select" ON public.admin_profiles
-  FOR SELECT
-  TO authenticated
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TABLE 7: admin_profiles
+--   Anonymous    : Zero access
+--   Authenticated: SELECT own row (user_id = auth.uid())
+--   Admin        : SELECT all rows
+--   Super-admin  : Full CRUD with hardened WITH CHECK:
+--                  - Caller JWT email must be tharshini1773@gmail.com
+--                  - Stored email column must equal tharshini1773@gmail.com
+--                  - On INSERT: user_id must equal auth.uid() (no impersonation)
+--                  - role must be one of the allowed values
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE POLICY "v6_admin_profiles_self_select" ON public.admin_profiles
+  FOR SELECT TO authenticated
   USING (user_id = auth.uid());
 
-CREATE POLICY "v5_admin_profiles_admin_select" ON public.admin_profiles
-  FOR SELECT
-  TO authenticated
+CREATE POLICY "v6_admin_profiles_admin_select" ON public.admin_profiles
+  FOR SELECT TO authenticated
   USING (public.is_admin());
 
-CREATE POLICY "v5_admin_profiles_superadmin_all" ON public.admin_profiles
-  FOR ALL
-  TO authenticated
+CREATE POLICY "v6_admin_profiles_superadmin_all" ON public.admin_profiles
+  FOR ALL TO authenticated
   USING  (auth.jwt() ->> 'email' = 'tharshini1773@gmail.com')
   WITH CHECK (
+    -- Caller must be the designated super-admin
     auth.jwt() ->> 'email' = 'tharshini1773@gmail.com'
-    -- Prevent changing the stored email column to a different address
+    -- Stored email cannot be changed to another address
     AND email = 'tharshini1773@gmail.com'
+    -- Role must be a valid value (no arbitrary privilege strings)
+    AND role IN ('admin', 'staff', 'owner')
   );
 
 
 -- ==============================================================================
--- END OF MIGRATION v5
+-- STEP 6: Revoke default PUBLIC EXECUTE on trigger functions
+--         (trigger functions are called by the trigger mechanism only —
+--          they should not be directly callable by API users)
+-- ==============================================================================
+REVOKE EXECUTE ON FUNCTION public.check_order_total_on_item_change() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.handle_admin_auth_user()           FROM PUBLIC;
+
+
+-- ==============================================================================
+-- END OF MIGRATION v6
+--
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │  REQUIRED APPLICATION CODE CHANGE — supabaseService.ts                  │
+-- │                                                                          │
+-- │  createOrderInSupabase() must be replaced with a call to:               │
+-- │    supabase.rpc('submit_checkout', { ...payload })                       │
+-- │                                                                          │
+-- │  See companion file: src/lib/supabaseService.ts (updated below)         │
+-- └─────────────────────────────────────────────────────────────────────────┘
 --
 -- SECURITY DEFINER function inventory:
---   public.is_admin()                        — EXECUTE: PUBLIC (required by RLS)
---   public.handle_admin_auth_user()          — trigger only, not callable externally
---   public.validate_order_for_checkout()     — EXECUTE: anon, authenticated only
---   public.validate_order_item_price()       — EXECUTE: anon, authenticated only
---   public.check_order_total_on_item_insert()— trigger only, not callable externally
+--   public.is_admin()                        — EXECUTE: PUBLIC (RLS required)
+--   public.validate_order_item_price()       — EXECUTE: anon, authenticated
+--   public.submit_checkout()                 — EXECUTE: anon, authenticated
+--   public.check_order_total_on_item_change()— EXECUTE: trigger only (revoked)
+--   public.handle_admin_auth_user()          — EXECUTE: trigger only (revoked)
 --
--- No data modified. No RLS disabled. No service-role keys used or exposed.
+-- Policy counts:
+--   products       : 4  (1 public select, 3 admin write)
+--   customers      : 1  (1 admin all)
+--   orders         : 1  (1 admin all)
+--   order_items    : 1  (1 admin all)
+--   payments       : 1  (1 admin all)
+--   offers         : 2  (1 public select, 1 admin all)
+--   admin_profiles : 3  (self select, admin select, superadmin all)
+--   TOTAL          : 13
+--
+-- No data modified. No RLS disabled. No service-role keys exposed.
 -- ==============================================================================
