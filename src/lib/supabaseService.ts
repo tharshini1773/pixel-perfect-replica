@@ -12,7 +12,7 @@ import {
   type DbOrderItem,
   type DbOffer,
   type DbPayment,
-} from "./supabase";
+} from "./supabase.ts";
 
 // ============================================================
 // HELPERS
