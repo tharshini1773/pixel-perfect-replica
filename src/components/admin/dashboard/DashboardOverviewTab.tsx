@@ -19,6 +19,7 @@ import {
   ChevronRight,
   ShieldCheck,
   Tag,
+  Percent,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -38,7 +39,7 @@ interface DashboardOverviewTabProps {
 }
 
 export function DashboardOverviewTab({ onNavigateTab }: DashboardOverviewTabProps) {
-  const { products, orders, customers, inventory } = useBakeryStore();
+  const { products, orders, customers, inventory, offers } = useBakeryStore();
 
   // Interactive Modals State
   const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
@@ -164,7 +165,7 @@ export function DashboardOverviewTab({ onNavigateTab }: DashboardOverviewTabProp
       )}
 
       {/* 2. Interactive KPI Summary Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         {/* Card 1: Total Revenue - Clickable */}
         <div
           onClick={() => setIsRevenueModalOpen(true)}
@@ -289,6 +290,57 @@ export function DashboardOverviewTab({ onNavigateTab }: DashboardOverviewTabProp
             </span>
           </div>
         </div>
+
+        {/* Card 5: Active Offers - Clickable */}
+        {(() => {
+          const activeOffers = offers.filter((o) => o.isActive);
+          const totalOffers = offers.length;
+          const nextExpiry = offers
+            .filter((o) => o.isActive && o.endDate)
+            .sort((a, b) => new Date(a.endDate!).getTime() - new Date(b.endDate!).getTime())[0];
+          const daysLeft = nextExpiry
+            ? Math.max(0, Math.ceil((new Date(nextExpiry.endDate!).getTime() - Date.now()) / 86400000))
+            : null;
+          return (
+            <div
+              onClick={() => onNavigateTab("offers")}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNavigateTab("offers"); } }}
+              className="group relative overflow-hidden rounded-3xl border border-[#EFE4DB] bg-white p-5 shadow-card hover:shadow-xl hover:-translate-y-1 hover:border-amber-300 cursor-pointer transition-all duration-300"
+            >
+              {/* animated glow */}
+              <div className="pointer-events-none absolute -right-4 -top-4 h-16 w-16 rounded-full bg-amber-100 opacity-0 group-hover:opacity-60 transition-opacity duration-500" />
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#8C7A70] group-hover:text-amber-600 transition-colors">
+                  Active Offers
+                </span>
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-amber-50 text-amber-600 transition-transform group-hover:scale-110">
+                  <Percent className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="font-display text-2xl sm:text-3xl font-bold text-[#1A100C]">
+                  {activeOffers.length}
+                </span>
+                <span className="text-xs font-bold text-amber-600">
+                  / {totalOffers} total
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-[0.7rem] text-[#8C7A70]">
+                  {daysLeft !== null
+                    ? `Next expiry: ${daysLeft}d`
+                    : "Manage discounts"}
+                </p>
+                <span className="inline-flex items-center gap-1 text-[0.68rem] font-bold text-amber-600 opacity-80 group-hover:opacity-100 transition-opacity">
+                  <span>Manage Offers</span>
+                  <ArrowUpRight className="h-3 w-3" />
+                </span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* 3. Analytics Chart & Order Pipeline Breakdown */}
