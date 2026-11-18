@@ -29,6 +29,7 @@ export const Route = createFileRoute("/admin/products")({
       "Manage handcrafted cakes, prices, images, stock, and categories.",
     ),
   }),
+  ssr: false,
   component: AdminProductsPage,
 });
 

@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { pageMeta } from "@/lib/seo";
 
 export const Route = createFileRoute("/admin/customers")({
+  ssr: false,
   head: () => ({
     meta: pageMeta(
       "Customer Management — Sweet Crumbs Bakery Admin",

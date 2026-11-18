@@ -44,6 +44,7 @@ import { NotificationsTab } from "@/components/admin/dashboard/NotificationsTab"
 import { SettingsTab } from "@/components/admin/dashboard/SettingsTab";
 
 export const Route = createFileRoute("/admin/dashboard")({
+  ssr: false,
   validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
     tab: (search["tab"] as string) || "dashboard",
   }),
@@ -186,11 +187,10 @@ function AdminDashboardPage() {
               <button
                 key={item.key}
                 onClick={() => switchTab(item.key as TabKey)}
-                className={`group flex w-full items-center justify-between rounded-2xl px-3.5 py-2.5 text-xs font-bold transition-all ${
-                  active
-                    ? "bg-rose text-white shadow-soft shadow-rose/20"
-                    : "text-[#5C4D44] hover:bg-[#FAF7F2] hover:text-[#1A100C]"
-                }`}
+                className={`group flex w-full items-center justify-between rounded-2xl px-3.5 py-2.5 text-xs font-bold transition-all ${active
+                  ? "bg-rose text-white shadow-soft shadow-rose/20"
+                  : "text-[#5C4D44] hover:bg-[#FAF7F2] hover:text-[#1A100C]"
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <Icon className={`h-4 w-4 transition-transform group-hover:scale-110 ${active ? "text-white" : "text-[#8C7A70]"}`} />
@@ -199,9 +199,8 @@ function AdminDashboardPage() {
 
                 {item.badge && (
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[0.65rem] font-bold text-white shadow-sm ${
-                      active ? "bg-white/20 text-white" : item.badgeColor
-                    }`}
+                    className={`rounded-full px-2 py-0.5 text-[0.65rem] font-bold text-white shadow-sm ${active ? "bg-white/20 text-white" : item.badgeColor
+                      }`}
                   >
                     {item.badge}
                   </span>
@@ -271,9 +270,8 @@ function AdminDashboardPage() {
                   <button
                     key={item.key}
                     onClick={() => switchTab(item.key as TabKey)}
-                    className={`flex items-center justify-between rounded-xl p-2.5 text-xs font-bold ${
-                      active ? "bg-rose text-white" : "bg-[#FAF7F2] text-[#5C4D44]"
-                    }`}
+                    className={`flex items-center justify-between rounded-xl p-2.5 text-xs font-bold ${active ? "bg-rose text-white" : "bg-[#FAF7F2] text-[#5C4D44]"
+                      }`}
                   >
                     <div className="flex items-center gap-2">
                       <Icon className="h-4 w-4" />

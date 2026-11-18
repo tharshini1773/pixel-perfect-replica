@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { pageMeta } from "@/lib/seo";
 
 export const Route = createFileRoute("/admin/settings")({
+  ssr: false,
   head: () => ({
     meta: pageMeta(
       "Admin Settings — Sweet Crumbs Bakery",
